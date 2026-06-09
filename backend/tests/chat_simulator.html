@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AkaSport — Live Chat Simulator</title>
+<style>
+  :root { --bg:#0f1720; --panel:#16212e; --accent:#3b82f6; --text:#e5edf5; --muted:#7d8ba0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         background:var(--bg); color:var(--text); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 13px; }
+  .panel { background:var(--panel); border:1px solid #243446; border-radius:10px;
+           padding:14px; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--muted); margin: 8px 0 4px; }
+  input, textarea { width:100%; padding:9px 10px; border-radius:7px; border:1px solid #2c3e52;
+                    background:#0c141d; color:var(--text); font-size:14px; }
+  .row { display:flex; gap:10px; }
+  .row > div { flex:1; }
+  button { background:var(--accent); color:#fff; border:0; padding:10px 16px; border-radius:7px;
+           font-size:14px; cursor:pointer; }
+  button.secondary { background:#334155; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .controls { display:flex; gap:10px; align-items:center; margin-top:10px; }
+  #status { font-size:12px; padding:3px 9px; border-radius:99px; }
+  .s-off { background:#3f1d1d; color:#fca5a5; }
+  .s-on  { background:#14361f; color:#86efac; }
+  #log { height: 340px; overflow-y:auto; background:#0a1119; border-radius:8px; padding:10px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12.5px; }
+  .msg { margin:4px 0; padding:6px 9px; border-radius:6px; }
+  .m-sent { background:#10243d; }
+  .m-recv { background:#13251a; }
+  .m-system { color:var(--muted); font-style:italic; }
+  .m-error { background:#3a1414; color:#fca5a5; }
+  .meta { color:var(--muted); font-size:11px; }
+  .send-row { display:flex; gap:10px; margin-top:10px; }
+  .send-row input { flex:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AkaSport — Live Chat Simulator</h1>
+  <p class="sub">Connects to <code>ws://HOST:PORT/ws/chat/?token=…</code> and streams messages in real time.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label>Server host</label>
+        <input id="host" value="127.0.0.1" />
+      </div>
+      <div>
+        <label>Port</label>
+        <input id="port" value="8000" />
+      </div>
+      <div>
+        <label>Room id (admins only — leave blank as customer)</label>
+        <input id="room" placeholder="(auto for customers)" />
+      </div>
+    </div>
+    <label>JWT access token</label>
+    <textarea id="token" rows="3" placeholder="Paste the access token from /api/auth/login/"></textarea>
+    <div class="controls">
+      <button id="connectBtn">Connect</button>
+      <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+      <span id="status" class="s-off">disconnected</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="log"></div>
+    <div class="send-row">
+      <input id="message" placeholder="Type a message…" disabled
+             onkeydown="if(event.key==='Enter')document.getElementById('sendBtn').click()" />
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let socket = null;
+
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+
+  function stamp() {
+    return new Date().toLocaleTimeString();
+  }
+
+  function log(kind, text, meta) {
+    const div = document.createElement("div");
+    div.className = "msg m-" + kind;
+    div.innerHTML = `<span class="meta">[${stamp()}]</span> ${text}` +
+                    (meta ? ` <span class="meta">${meta}</span>` : "");
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setConnected(on) {
+    $("status").textContent = on ? "connected" : "disconnected";
+    $("status").className = on ? "s-on" : "s-off";
+    $("connectBtn").disabled = on;
+    $("disconnectBtn").disabled = !on;
+    $("message").disabled = !on;
+    $("sendBtn").disabled = !on;
+  }
+
+  function buildUri() {
+    const host = $("host").value.trim() || "127.0.0.1";
+    const port = $("port").value.trim() || "8000";
+    const room = $("room").value.trim();
+    const token = encodeURIComponent($("token").value.trim());
+    const path = room ? `/ws/chat/${room}/` : "/ws/chat/";
+    return `ws://${host}:${port}${path}?token=${token}`;
+  }
+
+  $("connectBtn").onclick = () => {
+    if (!$("token").value.trim()) { log("error", "A JWT token is required."); return; }
+    const uri = buildUri();
+    log("system", "Connecting to " + uri.replace(/token=[^&]+/, "token=…"));
+    try {
+      socket = new WebSocket(uri);
+    } catch (e) {
+      log("error", "Failed to open socket: " + e.message);
+      return;
+    }
+
+    socket.onopen = () => { setConnected(true); log("system", "Connection established."); };
+
+    socket.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch { log("recv", event.data); return; }
+      if (data.type === "message") {
+        log("recv", `<b>#${data.sender_id} (${data.sender_role})</b>: ${escapeHtml(data.message)}`,
+            `room ${data.room_id}`);
+      } else if (data.type === "system") {
+        log("system", `${data.event} — user #${data.user_id} (${data.role}) in room ${data.room_id}`);
+      } else if (data.type === "error") {
+        log("error", data.detail);
+      } else {
+        log("recv", JSON.stringify(data));
+      }
+    };
+
+    socket.onerror = () => log("error", "WebSocket error (see browser console).");
+
+    socket.onclose = (event) => {
+      setConnected(false);
+      const reason = event.code === 4401 ? "unauthenticated (bad/expired token)"
+                   : event.code === 4403 ? "forbidden (admins must pass a room id)"
+                   : event.code === 4404 ? "room not found"
+                   : (event.reason || "closed");
+      log("system", `Disconnected — code ${event.code}: ${reason}`);
+    };
+  };
+
+  $("disconnectBtn").onclick = () => { if (socket) socket.close(1000, "client closed"); };
+
+  $("sendBtn").onclick = () => {
+    const input = $("message");
+    const text = input.value.trim();
+    if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
+    const frame = JSON.stringify({ message: text });
+    socket.send(frame);
+    log("sent", "You: " + escapeHtml(text));
+    input.value = "";
+  };
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) =>
+      ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+  }
+</script>
+</body>
+</html>

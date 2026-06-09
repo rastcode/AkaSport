@@ -23,6 +23,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import Cast, Coalesce
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
@@ -165,16 +166,15 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
     lookup_field = "slug"
     filterset_class = ProductFilter
-    filter_backends = [
-        # DjangoFilterBackend is the project default; SearchFilter added here.
-        *(
-            __import__(
-                "django_filters.rest_framework", fromlist=["DjangoFilterBackend"]
-            ).DjangoFilterBackend,
-        ),
-        drf_filters.SearchFilter,
-    ]
-    search_fields = ("title_fa", "title_en", "brand__name_fa", "category__name_fa")
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    search_fields = (
+        "title_fa",
+        "title_en",
+        "brand__name_fa",
+        "brand__name_en",
+        "category__name_fa",
+        "category__name_en",
+    )
 
     def get_queryset(self) -> QuerySet[Product]:
         qs = annotated_products()

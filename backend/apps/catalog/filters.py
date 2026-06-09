@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 import django_filters
-from django.db.models import Q, QuerySet
+from django.db.models import F, Q, QuerySet
 
 from apps.catalog.models import Brand, Category, Product
 
@@ -47,9 +47,9 @@ class ProductFilter(django_filters.FilterSet):
     # --- dynamic JSON spec facet --------------------------------------- #
     spec = django_filters.CharFilter(method="filter_spec")
 
-    # --- ordering ------------------------------------------------------ #
-    sort = django_filters.ChoiceFilter(
-        method="filter_sort",
+    # --- ordering (param: ?ordering=newest|cheapest|...) --------------- #
+    ordering = django_filters.ChoiceFilter(
+        method="filter_ordering",
         choices=[(k, k) for k in ORDERING_MAP],
     )
 
@@ -132,7 +132,7 @@ class ProductFilter(django_filters.FilterSet):
         if value is None:
             return queryset
         discounted = Q(discount_price__isnull=False) & Q(
-            discount_price__lt=models_f_base()
+            discount_price__lt=F("base_price")
         )
         return queryset.filter(discounted) if value else queryset.exclude(discounted)
 
@@ -154,7 +154,9 @@ class ProductFilter(django_filters.FilterSet):
     # ------------------------------------------------------------------ #
     # Ordering
     # ------------------------------------------------------------------ #
-    def filter_sort(self, queryset: QuerySet, name: str, value: str) -> QuerySet:
+    def filter_ordering(
+        self, queryset: QuerySet, name: str, value: str
+    ) -> QuerySet:
         order_by = ORDERING_MAP.get(value)
         return queryset.order_by(order_by) if order_by else queryset
 

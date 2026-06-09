@@ -1,107 +1,108 @@
 /**
- * Product detail page — Server Component (SSR).
+ * صفحه‌ی جزئیات محصول (RTL / فارسی) — Server Component.
  *
- * Data is fetched on the server so the fully-rendered HTML (title, description,
- * specs) is delivered for SEO and fast first paint. `generateMetadata` pulls
- * per-product SEO tags (title/description/OpenGraph image) from the backend.
- *
- * Interactive bits (gallery, variant selector) are isolated client components.
+ * داده فقط از `catalogService.getProductBySlug` (/api/catalog/products/{slug}/)
+ * گرفته می‌شود. خوشه‌ی تعاملی (گالری/انتخاب تنوع/جعبه‌ی خرید) Client است؛ بقیه
+ * سمت سرور رندر می‌شوند. `generateMetadata` از داده‌ی واقعی محصول استفاده می‌کند.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ProductGallery } from "@/components/catalog/ProductGallery";
-import { SpecificationsTable } from "@/components/catalog/SpecificationsTable";
-import { VariantSelector } from "@/components/catalog/VariantSelector";
-import {
-  getProductBySlug,
-  resolveMediaUrl,
-} from "@/services/productService";
+import { ProductInteractive } from "@/components/products/ProductInteractive";
+import { ProductSpecifications } from "@/components/products/ProductSpecifications";
+import { getProductBySlug, resolveMediaUrl } from "@/services/catalogService";
+
+export const dynamic = "force-dynamic"; // موجودی و بازدید لحظه‌ای
 
 interface PageProps {
   params: { slug: string };
 }
 
-/* ------------------------------ SEO metadata ------------------------------- */
+/* ------------------------------ متادیتای سئو ------------------------------ */
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const product = await getProductBySlug(params.slug);
+  let product = null;
+  try {
+    product = await getProductBySlug(params.slug);
+  } catch {
+    product = null;
+  }
 
   if (!product) {
     return {
-      title: "Product not found — AkaSport",
-      description: "The product you’re looking for is unavailable.",
+      title: "محصول یافت نشد | آکامارکت",
+      description: "محصول موردنظر یافت نشد یا حذف شده است.",
       robots: { index: false, follow: false },
     };
   }
 
-  const primaryImage =
+  const title = product.seo_title || `${product.title_fa} | آکامارکت`;
+  const description =
+    product.seo_description ||
+    (product.description_fa
+      ? product.description_fa.slice(0, 160)
+      : `خرید ${product.title_fa} با بهترین قیمت از آکامارکت.`);
+
+  const image =
     resolveMediaUrl(
-      product.images.find((i) => i.is_primary)?.image ??
+      product.primary_image ??
+        product.images.find((i) => i.is_primary)?.image ??
         product.images[0]?.image ??
         null,
     ) ?? undefined;
 
-  const description =
-    product.description?.slice(0, 160) ||
-    `Buy ${product.title}${product.brand ? ` by ${product.brand.name}` : ""} at AkaSport.`;
-
   return {
-    title: `${product.title} — AkaSport`,
+    title,
     description,
-    keywords: [
-      product.title,
-      product.brand?.name,
-      product.category?.name,
-      "sports gear",
-    ].filter(Boolean) as string[],
     alternates: { canonical: `/product/${product.slug}` },
     openGraph: {
-      title: product.title,
+      title,
       description,
       type: "website",
-      images: primaryImage ? [{ url: primaryImage, alt: product.title }] : [],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: product.title,
-      description,
-      images: primaryImage ? [primaryImage] : [],
+      images: image ? [{ url: image, alt: product.title_fa }] : [],
     },
   };
 }
 
-/* ------------------------------- the page ---------------------------------- */
+/* -------------------------------- صفحه ----------------------------------- */
 export default async function ProductDetailPage({ params }: PageProps) {
-  const product = await getProductBySlug(params.slug);
+  let product = null;
+  let failed = false;
+  try {
+    product = await getProductBySlug(params.slug);
+  } catch {
+    failed = true;
+  }
+
+  if (failed) {
+    return (
+      <main dir="rtl" className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <p className="rounded-xl border border-red-200 bg-red-50 p-8 text-red-700">
+          خطا در دریافت اطلاعات محصول.
+        </p>
+      </main>
+    );
+  }
+
   if (!product) notFound();
 
-  const jsonLd = buildJsonLd(product);
-
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* JSON-LD structured data for rich search results. */}
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-
-      {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="mb-6 text-sm text-blue-slate">
+    <main dir="rtl" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* مسیر راهنما */}
+      <nav aria-label="مسیر" className="mb-6 text-sm text-blue-slate">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li>
             <Link href="/" className="hover:text-bondi-blue">
-              Home
+              خانه
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
             <Link href="/products" className="hover:text-bondi-blue">
-              Products
+              محصولات
             </Link>
           </li>
           {product.category && (
@@ -109,109 +110,38 @@ export default async function ProductDetailPage({ params }: PageProps) {
               <li aria-hidden>/</li>
               <li>
                 <Link
-                  href={`/products?category=${product.category.slug}`}
+                  href={`/products?category=${encodeURIComponent(product.category.slug)}`}
                   className="hover:text-bondi-blue"
                 >
-                  {product.category.name}
+                  {product.category.name_fa}
                 </Link>
               </li>
             </>
           )}
           <li aria-hidden>/</li>
           <li className="font-medium text-iron-grey" aria-current="page">
-            {product.title}
+            {product.title_fa}
           </li>
         </ol>
       </nav>
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-        {/* Gallery */}
-        <ProductGallery images={product.images} title={product.title} />
+      {/* خوشه‌ی تعاملی: تصاویر / اطلاعات و تنوع / خرید */}
+      <ProductInteractive product={product} />
 
-        {/* Buy box */}
-        <div>
-          {product.brand && (
-            <Link
-              href={`/products?brand=${product.brand.slug}`}
-              className="inline-block rounded-full bg-bondi-blue/10 px-3 py-1 text-xs
-                         font-semibold uppercase tracking-wide text-bondi-blue-dark
-                         hover:bg-bondi-blue/20"
-            >
-              {product.brand.name}
-            </Link>
-          )}
+      {/* مشخصات فنی */}
+      <ProductSpecifications specifications={product.specifications} />
 
-          <h1 className="mt-3 text-3xl font-extrabold text-iron-grey sm:text-4xl">
-            {product.title}
-          </h1>
-
-          {product.description && (
-            <p className="mt-4 leading-relaxed text-blue-slate">
-              {product.description}
-            </p>
-          )}
-
-          <hr className="my-6 border-silver" />
-
-          <VariantSelector
-            basePrice={product.base_price}
-            variants={product.variants}
-            productTitle={product.title}
-            productSlug={product.slug}
-            productImage={
-              product.images.find((i) => i.is_primary)?.image ??
-              product.images[0]?.image ??
-              null
-            }
-          />
-        </div>
-      </div>
-
-      {/* Dynamic specifications */}
-      <SpecificationsTable
-        specifications={product.specifications}
-        schema={product.effective_schema}
-      />
+      {/* توضیحات */}
+      <section dir="rtl" className="mt-10">
+        <h2 className="mb-3 text-lg font-bold text-iron-grey">معرفی محصول</h2>
+        {product.description_fa ? (
+          <p className="leading-loose text-blue-slate">{product.description_fa}</p>
+        ) : (
+          <p className="rounded-xl border border-silver bg-dust-grey/40 p-5 text-sm text-blue-slate">
+            توضیحاتی برای این محصول ثبت نشده است.
+          </p>
+        )}
+      </section>
     </main>
   );
 }
-
-/* ------------------------------ JSON-LD helper ----------------------------- */
-function buildJsonLd(product: Awaited<ReturnType<typeof getProductBySlug>>) {
-  if (!product) return {};
-  const image = resolveMediaUrl(
-    product.images.find((i) => i.is_primary)?.image ??
-      product.images[0]?.image ??
-      null,
-  );
-  const prices = product.variants
-    .filter((v) => v.is_active)
-    .map((v) => Number(v.final_price));
-  const low = prices.length ? Math.min(...prices) : Number(product.base_price);
-  const high = prices.length ? Math.max(...prices) : Number(product.base_price);
-
-  return {
-    "@context": "https://schema.org/",
-    "@type": "Product",
-    name: product.title,
-    description: product.description,
-    image: image ? [image] : [],
-    brand: product.brand
-      ? { "@type": "Brand", name: product.brand.name }
-      : undefined,
-    category: product.category?.name,
-    offers: {
-      "@type": "AggregateOffer",
-      priceCurrency: "USD",
-      lowPrice: low.toFixed(2),
-      highPrice: high.toFixed(2),
-      offerCount: product.variants.length || 1,
-      availability: product.in_stock
-        ? "https://schema.org/InStock"
-        : "https://schema.org/OutOfStock",
-    },
-  };
-}
-
-/** Display-only helper retained for potential future price summaries. */
-export const dynamic = "force-dynamic"; // ensure fresh stock on each request

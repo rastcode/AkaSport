@@ -101,4 +101,4 @@ class CustomUserManager(BaseUserManager):
     # ------------------------------------------------------------------ #
     def get_by_natural_key(self, username: str) -> "CustomUser":
         return self.get(Q(phone_number=username) | Q(email__iexact=username))
-    # phone-first manager (Phase 1 refactor)
+    # phone-first manager (Phase 1 refactor; verified in Phase 0)

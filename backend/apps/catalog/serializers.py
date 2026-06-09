@@ -155,14 +155,15 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 # Product (read)
 # --------------------------------------------------------------------------- #
 class ProductListSerializer(serializers.ModelSerializer):
-    """Lightweight product card for listing pages."""
+    """Lightweight product card for listing pages.
 
-    brand_name = serializers.CharField(
-        source="brand.name_fa", read_only=True, default=None
-    )
-    category_name = serializers.CharField(
-        source="category.name_fa", read_only=True, default=None
-    )
+    `brand` و `category` به‌صورت شیء فشرده (id/name_fa/slug) برگردانده می‌شوند تا
+    فرانت بتواند پیوندهایی مثل /products?category=running-shoes بسازد. این فیلدها
+    با select_related روی queryset پر می‌شوند و N+1 ایجاد نمی‌کنند.
+    """
+
+    brand = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
     effective_price = serializers.DecimalField(
         max_digits=12, decimal_places=0, read_only=True
     )
@@ -177,8 +178,8 @@ class ProductListSerializer(serializers.ModelSerializer):
             "id",
             "title_fa",
             "slug",
-            "brand_name",
-            "category_name",
+            "brand",
+            "category",
             "base_price",
             "discount_price",
             "effective_price",
@@ -190,6 +191,14 @@ class ProductListSerializer(serializers.ModelSerializer):
             "in_stock",
             "primary_image",
         )
+
+    def get_brand(self, obj: Product) -> Optional[dict[str, Any]]:
+        b = obj.brand
+        return {"id": b.id, "name_fa": b.name_fa, "slug": b.slug} if b else None
+
+    def get_category(self, obj: Product) -> Optional[dict[str, Any]]:
+        c = obj.category
+        return {"id": c.id, "name_fa": c.name_fa, "slug": c.slug} if c else None
 
     def get_primary_image(self, obj: Product) -> Optional[str]:
         images = list(obj.images.all())

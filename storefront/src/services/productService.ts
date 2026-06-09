@@ -1,14 +1,15 @@
 /**
- * Product catalog service layer.
+ * ⚠️ سرویس قدیمی (legacy) — مربوط به اپ `apps.products` و endpointهای
+ * `/api/products/` و `/api/categories/`.
  *
- * Uses the native `fetch` API (not the axios client) so these functions run in
- * BOTH server components (SSR / generateMetadata) and client components. No
- * auth is required for public catalog reads.
+ * برای دامنه‌ی کاتالوگ جدید مارکت‌پلیس از این فایل استفاده نکنید؛ به‌جای آن
+ * `@/services/catalogService` (متصل به `/api/catalog/`) را به‌کار ببرید.
  *
- * Responsibilities:
- *   - translate UI `CatalogFilters` <-> Django REST query params
- *     (including the JSONB `attr=` facet syntax from backend Part 2).
- *   - provide typed fetchers with sensible Next.js caching.
+ * این فایل فقط تا زمانی نگه داشته شده که صفحات قدیمی (homepage فعلی، فهرست و
+ * جزئیات محصول و سبد) به کاتالوگ جدید مهاجرت کنند؛ سپس حذف خواهد شد.
+ *
+ * Uses the native `fetch` API so these functions run in both server and client
+ * components.
  */
 
 import type {

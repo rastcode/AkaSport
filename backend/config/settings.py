@@ -358,6 +358,7 @@ CATALOG_CACHE_KEYS = {
     "product_list": "catalog:product_list",
     "category_tree": "catalog:category_tree",
 }
+# (Phase 0) cache keys above are consumed by the catalog cache-invalidation signal.
 
 # Image optimization (Part 5).
 IMAGE_OPTIMIZE_ENABLED = env_bool("IMAGE_OPTIMIZE_ENABLED", True)

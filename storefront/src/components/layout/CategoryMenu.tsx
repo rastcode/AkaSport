@@ -11,8 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { getCategoryTree } from "@/services/productService";
-import type { CategoryTreeNode } from "@/types/product";
+import { getCategoryTree } from "@/services/catalogService";
+import type { CategoryTreeNode } from "@/types/catalog";
 import { cn } from "@/lib/cn";
 
 export function CategoryMenu() {
@@ -87,7 +87,7 @@ export function CategoryMenu() {
                         href={`/products?category=${encodeURIComponent(node.slug)}`}
                         className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-iron-grey hover:bg-dust-grey hover:text-bondi-blue"
                       >
-                        {node.name_fa ?? node.name ?? node.slug}
+                        {node.name_fa || node.slug}
                         {node.children?.length ? (
                           <span className="text-xs text-silver">
                             {node.children.length} زیردسته
@@ -112,7 +112,7 @@ export function CategoryMenu() {
                   "rounded-lg px-3 py-3 text-sm font-medium text-blue-slate hover:text-bondi-blue",
                 )}
               >
-                {node.name_fa ?? node.name ?? node.slug}
+                {node.name_fa || node.slug}
               </Link>
             </li>
           ))}

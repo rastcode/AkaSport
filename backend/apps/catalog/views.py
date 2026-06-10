@@ -265,6 +265,55 @@ class AdminProductVariantViewSet(viewsets.ModelViewSet):
 
 
 class AdminProductImageViewSet(viewsets.ModelViewSet):
+    """
+    CRUD تصاویر محصول (فقط ADMIN/OWNER) با مدیریت «تصویر اصلی» تک‌تصویری:
+
+      * نخستین تصویرِ هر محصول خودکار اصلی می‌شود.
+      * اگر تصویری با is_primary=true ثبت/ویرایش شود، بقیه‌ی تصاویر همان محصول
+        غیر‌اصلی می‌شوند.
+      * با حذف تصویرِ اصلی، در صورت وجود تصویر دیگر، یکی (کمترین display_order،
+        سپس قدیمی‌ترین) خودکار اصلی می‌شود.
+    """
+
     queryset = ProductImage.objects.select_related("product", "variant").all()
     serializer_class = ProductImageSerializer
     permission_classes = [IsAdminOrOwner]
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        image = serializer.save()
+        product_id = image.product_id
+        # نخستین تصویر محصول → خودکار اصلی.
+        is_first = (
+            not ProductImage.objects.filter(product_id=product_id)
+            .exclude(pk=image.pk)
+            .exists()
+        )
+        if is_first and not image.is_primary:
+            image.is_primary = True
+            image.save(update_fields=["is_primary"])
+        self._enforce_single_primary(image)
+
+    def perform_update(self, serializer: BaseSerializer) -> None:
+        image = serializer.save()
+        self._enforce_single_primary(image)
+
+    def perform_destroy(self, instance: ProductImage) -> None:
+        product_id = instance.product_id
+        was_primary = instance.is_primary
+        instance.delete()
+        if was_primary:
+            replacement = (
+                ProductImage.objects.filter(product_id=product_id)
+                .order_by("display_order", "id")
+                .first()
+            )
+            if replacement is not None and not replacement.is_primary:
+                replacement.is_primary = True
+                replacement.save(update_fields=["is_primary"])
+
+    @staticmethod
+    def _enforce_single_primary(image: ProductImage) -> None:
+        if image.is_primary:
+            ProductImage.objects.filter(
+                product_id=image.product_id, is_primary=True
+            ).exclude(pk=image.pk).update(is_primary=False)

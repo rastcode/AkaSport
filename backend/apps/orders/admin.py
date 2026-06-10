@@ -32,16 +32,20 @@ class OrderItemInline(admin.TabularInline):
         "product_variant",
         "variant_sku",
         "product_title",
+        "variant_label",
         "quantity",
         "price_at_purchase",
-        "line_total",
+        "total_price",
     )
-    readonly_fields = ("variant_sku", "product_title", "price_at_purchase", "line_total")
+    # داده‌ی فریزشده‌ی فاکتور تا حد امکان فقط‌خواندنی است.
+    readonly_fields = (
+        "variant_sku",
+        "product_title",
+        "variant_label",
+        "price_at_purchase",
+        "total_price",
+    )
     autocomplete_fields = ("product_variant",)
-
-    @admin.display(description=_("Line total"))
-    def line_total(self, obj: OrderItem):
-        return obj.line_total
 
 
 class CartItemInline(admin.TabularInline):
@@ -97,7 +101,10 @@ class OrderAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        (_("Shipping"), {"fields": ("shipping_address",)}),
+        (
+            _("Shipping"),
+            {"fields": ("receiver_name", "receiver_phone", "shipping_address")},
+        ),
         (_("Timestamps"), {"fields": ("paid_at", "created_at", "updated_at")}),
     )
 

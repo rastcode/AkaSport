@@ -11,6 +11,7 @@ import Link from "next/link";
 
 import { SearchBar } from "@/components/layout/SearchBar";
 import { CategoryMenu } from "@/components/layout/CategoryMenu";
+import { MobileDrawerMenu } from "@/components/layout/MobileDrawerMenu";
 import { Logo } from "@/components/ui/Logo";
 import { IconLink } from "@/components/ui/IconButton";
 import { buttonClass } from "@/components/ui/Button";
@@ -27,6 +28,9 @@ export function Header() {
       {/* ردیف اصلی */}
       <div className="border-b border-silver">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-5 sm:px-6 lg:px-8">
+          {/* همبرگر — فقط موبایل (drawer حساب/مدیریت) */}
+          <MobileDrawerMenu className="shrink-0 sm:hidden" />
+
           <Logo className="shrink-0" />
 
           {/* جست‌وجو — عنصر اصلی سربرگ (دسکتاپ) */}
@@ -35,14 +39,26 @@ export function Header() {
           </div>
 
           {/* اقدامات */}
-          <div className="flex items-center gap-2 sm:mr-auto">
+          <div className="flex items-center gap-2 mr-auto">
             {isAuthenticated ? (
-              <Link
-                href={isStaff ? "/admin/dashboard" : "/profile"}
-                className={buttonClass("ghost", "md", "hidden sm:inline-flex")}
-              >
-                {isStaff ? "پنل مدیریت" : "حساب کاربری"}
-              </Link>
+              <>
+                {/* لینک پنل مدیریت فقط برای مدیر/مالک (افزون بر حساب کاربری) */}
+                {isStaff && (
+                  <Link
+                    href="/admin/dashboard"
+                    className={buttonClass("ghost", "md", "hidden sm:inline-flex")}
+                  >
+                    پنل مدیریت
+                  </Link>
+                )}
+                {/* حساب کاربری برای همه‌ی کاربران لاگین‌شده (از جمله مدیر) */}
+                <Link
+                  href="/profile"
+                  className={buttonClass("outline", "md", "hidden sm:inline-flex")}
+                >
+                  حساب کاربری
+                </Link>
+              </>
             ) : (
               <Link
                 href="/login"

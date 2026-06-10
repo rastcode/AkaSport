@@ -36,6 +36,7 @@ import type {
   LoginPayload,
   LoginResponse,
   OtpRequestResponse,
+  RegisterPayload,
   User,
 } from "@/types/auth";
 
@@ -75,6 +76,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     [fetchProfile],
+  );
+
+  const register = useCallback(
+    async (payload: RegisterPayload): Promise<User> => {
+      try {
+        // ثبت‌نام نقش را در سمت سرور به CUSTOMER تثبیت می‌کند.
+        await api.post("/auth/register/", payload);
+      } catch (error) {
+        throw normalizeError(error);
+      }
+      // ورود خودکار با شماره و رمز عبور (سرور در پاسخ ثبت‌نام توکن نمی‌دهد).
+      return login({
+        method: "password",
+        identifier: payload.phone_number,
+        password: payload.password,
+      });
+    },
+    [login],
   );
 
   const requestOtp = useCallback(
@@ -164,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(user),
       isLoading,
       login,
+      register,
       loginWithOtp,
       requestOtp,
       logout,
@@ -171,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await fetchProfile();
       },
     }),
-    [user, isLoading, login, loginWithOtp, requestOtp, logout, fetchProfile],
+    [user, isLoading, login, register, loginWithOtp, requestOtp, logout, fetchProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

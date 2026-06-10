@@ -32,26 +32,26 @@ export function CategoryShortcutGrid({
             <Link
               key={category.id}
               href={`/products?category=${encodeURIComponent(category.slug)}`}
-              className="group flex flex-col items-center gap-2 rounded-xl border border-silver
+              className="group flex flex-col items-center gap-2.5 rounded-2xl border border-silver/60
                          bg-white p-4 text-center transition-all hover:-translate-y-1
-                         hover:border-bondi-blue hover:shadow-card"
+                         hover:border-brand-accent/40 hover:shadow-card"
             >
               {iconUrl ? (
-                <span className="relative h-14 w-14 overflow-hidden rounded-full">
+                <span className="relative h-12 w-12 overflow-hidden rounded-2xl">
                   <Image
                     src={iconUrl}
                     alt={category.name_fa}
                     fill
-                    sizes="56px"
+                    sizes="48px"
                     className="object-cover"
                   />
                 </span>
               ) : (
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-bondi-blue/10 text-lg font-black text-bondi-blue">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light text-lg font-black text-brand-accent/70 transition-colors group-hover:bg-brand-accent/10 group-hover:text-brand-accent">
                   {category.name_fa.slice(0, 1)}
                 </span>
               )}
-              <span className="text-xs font-semibold text-iron-grey group-hover:text-bondi-blue">
+              <span className="text-xs font-semibold leading-5 text-iron-grey group-hover:text-brand-accent">
                 {category.name_fa}
               </span>
             </Link>

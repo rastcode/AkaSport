@@ -17,23 +17,45 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        "dust-grey": "#dcdcdd", // Subtle, soft tone mirroring dusted stone
-        silver: "#c5c3c6", // Lustrous metallic sheen for modern elegance
-        "iron-grey": "#46494c", // Slate grey with a blue-green cast for durability
-        "blue-slate": "#4c5c68", // Hints of blue for cool authority and calm depth
-        "bondi-blue": "#1985a1", // Luminous aquatic blue — PRIMARY ACCENT
-        // Convenient hover/active shades derived from the accent.
-        "bondi-blue-dark": "#13697f",
-        "bondi-blue-light": "#22a3c3",
-        // Marketplace discount accent (red) — used only for discount badges/CTAs.
-        discount: "#e5413f",
+        // ---------------------------------------------------------------- //
+        // پالت برند AkaSport (semantic) — sporty / premium / bold
+        //   brand-dark   #2b2d42  Space Indigo   (متن اصلی، هدر/فوتر، پنل ادمین)
+        //   brand-muted  #8d99ae  Lavender Grey  (متن کم‌اهمیت، border ملایم)
+        //   brand-light  #edf2f4  Platinum       (پس‌زمینه‌ی صفحات/بخش‌های ملایم)
+        //   brand-accent #ef233c  Strawberry Red (CTA اصلی، badge تخفیف، انرژی)
+        //   brand-danger #d90429  Flag Red       (hover قرمز، خطا، حذف)
+        // ---------------------------------------------------------------- //
+        brand: {
+          dark: "#2b2d42",
+          muted: "#8d99ae",
+          light: "#edf2f4",
+          accent: "#ef233c",
+          danger: "#d90429",
+        },
+
+        // ---------------------------------------------------------------- //
+        // Aliasهای قدیمی — نام‌ها حفظ شده‌اند ولی به پالت جدید نگاشت شده‌اند تا
+        // کلاس‌های موجود در همه‌ی صفحات بدون تغییر، رنگ جدید بگیرند.
+        //   نکته‌ی کنتراست: iron-grey و blue-slate (متن) عمداً به brand-dark
+        //   نگاشت شده‌اند، نه lavender، تا خوانایی متن فارسی حفظ شود.
+        // ---------------------------------------------------------------- //
+        "dust-grey": "#edf2f4", // → brand-light (پس‌زمینه‌ی ملایم)
+        silver: "#8d99ae", // → brand-muted (border/متن خیلی کم‌رنگ)
+        "iron-grey": "#2b2d42", // → brand-dark (متن اصلی)
+        "blue-slate": "#2b2d42", // → brand-dark (متن ثانویه؛ کنتراست امن)
+        "bondi-blue": "#ef233c", // → brand-accent (accent اصلی / CTA)
+        "bondi-blue-dark": "#d90429", // → brand-danger (hover)
+        "bondi-blue-light": "#f4495a", // طیف روشن‌ترِ Strawberry برای گرادیان‌ها
+        discount: "#ef233c", // → brand-accent (badge تخفیف)
       },
       fontFamily: {
         sans: ["var(--font-vazirmatn)", "Vazirmatn", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        card: "0 10px 30px -12px rgba(70, 73, 76, 0.25)",
-        "focus-accent": "0 0 0 3px rgba(25, 133, 161, 0.35)",
+        // سایه‌ی کارت با ته‌مایه‌ی Space Indigo
+        card: "0 10px 30px -12px rgba(43, 45, 66, 0.25)",
+        // حلقه‌ی فوکوس با accent قرمز (Strawberry Red)
+        "focus-accent": "0 0 0 3px rgba(239, 35, 60, 0.35)",
       },
       keyframes: {
         "fade-in-up": {

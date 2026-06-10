@@ -16,6 +16,7 @@ import Link from "next/link";
 import { AdminChatCenter } from "@/components/admin/AdminChatCenter";
 import { AnalyticsCards } from "@/components/admin/AnalyticsCards";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LogoutButton } from "@/components/profile/LogoutButton";
 import { useAuth } from "@/context/AuthContext";
 import { fetchOpenRooms, fetchRooms } from "@/services/chatService";
 import { formatNumber, formatPersianDate } from "@/lib/persian";
@@ -119,12 +120,35 @@ function DashboardShell({
                 آمار و تحلیل
               </NavButton>
               <Link
+                href="/admin/orders"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                مدیریت سفارش‌ها
+              </Link>
+              <Link
+                href="/admin/products"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                مدیریت محصولات
+              </Link>
+              <Link
                 href="/products"
                 className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
               >
                 مشاهده‌ی فروشگاه
               </Link>
+              <Link
+                href="/profile"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                حساب کاربری
+              </Link>
             </nav>
+
+            {/* خروج از حساب */}
+            <div className="mt-4 border-t border-silver pt-4">
+              <LogoutButton />
+            </div>
 
             {/* فهرست اتاق‌های گفتگو */}
             <div className="mt-5 border-t border-silver pt-4">

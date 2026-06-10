@@ -101,7 +101,7 @@ api.interceptors.response.use(
             reject(normalizeError(error));
             return;
           }
-          const headers = AxiosHeaders.from(original.headers);
+          const headers = AxiosHeaders.from(original.headers as Record<string, string>);
           headers.set("Authorization", `Bearer ${token}`);
           original.headers = headers;
           resolve(api(original));
@@ -120,7 +120,7 @@ api.interceptors.response.use(
       return Promise.reject(normalizeError(error));
     }
 
-    const headers = AxiosHeaders.from(original.headers);
+    const headers = AxiosHeaders.from(original.headers as Record<string, string>);
     headers.set("Authorization", `Bearer ${newToken}`);
     original.headers = headers;
     return api(original);

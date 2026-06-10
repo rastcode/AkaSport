@@ -73,6 +73,19 @@ export interface OtpRequestPayload {
   phone_number: string;
 }
 
+/**
+ * بدنه‌ی ثبت‌نام مشتری (POST /auth/register/).
+ * نقش در سمت سرور به CUSTOMER تثبیت می‌شود؛ کاربر نقش انتخاب نمی‌کند.
+ */
+export interface RegisterPayload {
+  phone_number: string;
+  password: string;
+  password_confirm: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 /* ----------------------------- API responses ------------------------------ */
 
 export interface LoginResponse {
@@ -99,6 +112,7 @@ export interface ApiError {
 /** The context value consumed via `useAuth()`. */
 export interface AuthContextValue extends AuthState {
   login: (payload: LoginPayload) => Promise<User>;
+  register: (payload: RegisterPayload) => Promise<User>;
   loginWithOtp: (phone_number: string, code: string) => Promise<User>;
   requestOtp: (phone_number: string) => Promise<OtpRequestResponse>;
   logout: () => void;

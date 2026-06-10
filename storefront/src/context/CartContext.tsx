@@ -1,15 +1,12 @@
 "use client";
 
 /**
- * Global cart store.
+ * فروشگاه سراسری سبد خرید — فقط سمت سرور (backend-only).
  *
- * Dual-mode persistence:
- *   - GUEST  : lines live in localStorage (with a display snapshot per line).
- *   - AUTHED : lines are the source-of-truth Django cart (`/api/orders/cart/`).
- *
- * On login, any guest cart is merged into the server cart (additive), then the
- * local copy is cleared and the server cart becomes authoritative. All mutators
- * are optimistic where safe and fall back to a server refresh on error.
+ * سبد تنها برای کاربر لاگین‌شده کار می‌کند و از `/api/orders/cart/` می‌آید
+ * (بدون guest cart با localStorage). متدها بر اساس شناسه‌ی تنوع (variantId) کار
+ * می‌کنند و به‌صورت داخلی به شناسه‌ی CartItem نگاشت می‌شوند تا با PATCH/DELETE
+ * بک‌اند سازگار باشند.
  */
 
 import {
@@ -18,282 +15,181 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 
 import { useAuth } from "@/context/AuthContext";
 import {
-  clearServerCart,
-  deleteCartItem,
-  fetchServerCart,
-  postCartItem,
-} from "@/services/orderService";
+  addCartItem,
+  clearCart as clearCartApi,
+  getCart,
+  removeCartItem,
+  updateCartItem,
+} from "@/services/cartService";
 import type {
   CartContextValue,
-  CartLine,
-  CartLineMeta,
   ServerCart,
+  ServerCartItem,
 } from "@/types/cart";
 
-const STORAGE_KEY = "akasport_guest_cart";
-
 const CartContext = createContext<CartContextValue | undefined>(undefined);
-
-/* ------------------------------ local storage ------------------------------ */
-
-function readLocalCart(): CartLine[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as CartLine[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalCart(lines: CartLine[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(lines));
-  } catch {
-    /* storage may be unavailable (private mode) — fail silently */
-  }
-}
-
-/** Map a server cart payload into the unified `CartLine[]` shape. */
-function mapServerCart(cart: ServerCart): CartLine[] {
-  return cart.items.map((item) => ({
-    variantId: item.product_variant,
-    quantity: item.quantity,
-    lineId: item.id,
-    sku: item.sku,
-    title: item.product_title,
-    unitPrice: item.unit_price,
-    image: null,
-    availableStock: item.available_stock,
-  }));
-}
-
-/* -------------------------------- provider --------------------------------- */
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
-  const [lines, setLines] = useState<CartLine[]>([]);
+  const [items, setItems] = useState<ServerCartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const mergedForSession = useRef(false);
 
-  /* ----------------------------- server refresh ------------------------- */
+  const applyCart = useCallback((cart: ServerCart) => {
+    setItems(cart.items ?? []);
+  }, []);
+
   const refresh = useCallback(async (): Promise<void> => {
-    if (!isAuthenticated) return;
-    try {
-      const cart = await fetchServerCart();
-      setLines(mapServerCart(cart));
-    } catch {
-      /* keep current state on transient failure */
+    if (!isAuthenticated) {
+      setItems([]);
+      return;
     }
-  }, [isAuthenticated]);
+    try {
+      const cart = await getCart();
+      applyCart(cart);
+    } catch {
+      /* در صورت خطای گذرا، وضعیت فعلی حفظ می‌شود */
+    }
+  }, [isAuthenticated, applyCart]);
 
-  /* ------------------- bootstrap + login/logout transitions ------------- */
+  // بارگذاری اولیه و واکنش به ورود/خروج کاربر.
   useEffect(() => {
     if (authLoading) return;
-
     let cancelled = false;
 
-    const bootstrap = async (): Promise<void> => {
+    (async () => {
       setIsLoading(true);
-
       if (!isAuthenticated) {
-        // Guest: hydrate from localStorage.
-        mergedForSession.current = false;
-        setLines(readLocalCart());
-        setIsLoading(false);
-        return;
-      }
-
-      // Authenticated: merge any guest cart, then load the server cart.
-      setIsSyncing(true);
-      try {
-        const guestLines = readLocalCart();
-        if (guestLines.length > 0 && !mergedForSession.current) {
-          // Additive merge: push each guest line to the server cart.
-          for (const line of guestLines) {
-            try {
-              await postCartItem(line.variantId, line.quantity, "add");
-            } catch {
-              /* skip individual failures (e.g. stock) — best effort */
-            }
-          }
-          writeLocalCart([]);
-        }
-        mergedForSession.current = true;
-        const cart = await fetchServerCart();
-        if (!cancelled) setLines(mapServerCart(cart));
-      } catch {
-        if (!cancelled) setLines([]);
-      } finally {
         if (!cancelled) {
-          setIsSyncing(false);
+          setItems([]);
           setIsLoading(false);
         }
+        return;
       }
-    };
+      try {
+        const cart = await getCart();
+        if (!cancelled) applyCart(cart);
+      } catch {
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
 
-    void bootstrap();
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, applyCart]);
 
-  /* ------------------------------- mutators ----------------------------- */
-
-  const addToCart = useCallback(
-    async (variantId: number, quantity: number, meta: CartLineMeta) => {
-      if (quantity < 1) return;
-
-      if (isAuthenticated) {
-        setIsSyncing(true);
-        try {
-          const cart = await postCartItem(variantId, quantity, "add");
-          setLines(mapServerCart(cart));
-        } finally {
-          setIsSyncing(false);
-        }
-        return;
-      }
-
-      // Guest: merge into local state.
-      setLines((prev) => {
-        const existing = prev.find((l) => l.variantId === variantId);
-        const next = existing
-          ? prev.map((l) =>
-              l.variantId === variantId
-                ? { ...l, quantity: l.quantity + quantity }
-                : l,
-            )
-          : [...prev, { variantId, quantity, ...meta }];
-        writeLocalCart(next);
-        return next;
-      });
+  /* ------------------------------ نگاشت‌ها ------------------------------ */
+  const itemIdByVariant = useCallback(
+    (variantId: number): number | null => {
+      const line = items.find((it) => it.product_variant === variantId);
+      return line ? line.id : null;
     },
-    [isAuthenticated],
+    [items],
+  );
+
+  /* ------------------------------- متدها ------------------------------- */
+  const addToCart = useCallback(
+    async (variantId: number, quantity: number, _meta?: unknown) => {
+      if (!isAuthenticated || quantity < 1) return;
+      setIsSyncing(true);
+      try {
+        const cart = await addCartItem(variantId, quantity, "add");
+        applyCart(cart);
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    [isAuthenticated, applyCart],
   );
 
   const updateQuantity = useCallback(
     async (variantId: number, quantity: number) => {
-      const safeQty = Math.max(1, Math.floor(quantity));
-
-      if (isAuthenticated) {
-        setIsSyncing(true);
-        try {
-          // Backend "set" mode replaces the quantity to the exact value.
-          const cart = await postCartItem(variantId, safeQty, "set");
-          setLines(mapServerCart(cart));
-        } finally {
-          setIsSyncing(false);
-        }
-        return;
+      const id = itemIdByVariant(variantId);
+      if (id === null || quantity < 1) return;
+      setIsSyncing(true);
+      try {
+        const cart = await updateCartItem(id, quantity);
+        applyCart(cart);
+      } finally {
+        setIsSyncing(false);
       }
-
-      setLines((prev) => {
-        const next = prev.map((l) =>
-          l.variantId === variantId ? { ...l, quantity: safeQty } : l,
-        );
-        writeLocalCart(next);
-        return next;
-      });
     },
-    [isAuthenticated],
+    [itemIdByVariant, applyCart],
   );
 
   const removeFromCart = useCallback(
     async (variantId: number) => {
-      if (isAuthenticated) {
-        const target = lines.find((l) => l.variantId === variantId);
-        if (!target?.lineId) {
-          await refresh();
-          return;
-        }
-        setIsSyncing(true);
-        try {
-          const cart = await deleteCartItem(target.lineId);
-          setLines(mapServerCart(cart));
-        } finally {
-          setIsSyncing(false);
-        }
-        return;
-      }
-
-      setLines((prev) => {
-        const next = prev.filter((l) => l.variantId !== variantId);
-        writeLocalCart(next);
-        return next;
-      });
-    },
-    [isAuthenticated, lines, refresh],
-  );
-
-  const clearCart = useCallback(async () => {
-    if (isAuthenticated) {
+      const id = itemIdByVariant(variantId);
+      if (id === null) return;
       setIsSyncing(true);
       try {
-        await clearServerCart();
-        setLines([]);
+        const cart = await removeCartItem(id);
+        applyCart(cart);
       } finally {
         setIsSyncing(false);
       }
+    },
+    [itemIdByVariant, applyCart],
+  );
+
+  const clearCart = useCallback(async () => {
+    if (!isAuthenticated) {
+      setItems([]);
       return;
     }
-    writeLocalCart([]);
-    setLines([]);
+    setIsSyncing(true);
+    try {
+      await clearCartApi();
+      setItems([]);
+    } finally {
+      setIsSyncing(false);
+    }
   }, [isAuthenticated]);
 
-  /* ------------------------------- derived ------------------------------ */
-
+  /* ------------------------------- مشتقات ------------------------------ */
   const totalQuantity = useMemo(
-    () => lines.reduce((sum, l) => sum + l.quantity, 0),
-    [lines],
+    () => items.reduce((sum, it) => sum + it.quantity, 0),
+    [items],
   );
 
   const subtotal = useMemo(
-    () =>
-      lines.reduce(
-        (sum, l) => sum + Number(l.unitPrice || 0) * l.quantity,
-        0,
-      ),
-    [lines],
+    () => items.reduce((sum, it) => sum + Number(it.line_total || 0), 0),
+    [items],
   );
 
   const value = useMemo<CartContextValue>(
     () => ({
-      lines,
-      isAuthenticatedCart: isAuthenticated,
+      items,
+      totalQuantity,
+      subtotal,
       isLoading,
       isSyncing,
       addToCart,
-      removeFromCart,
       updateQuantity,
+      removeFromCart,
       clearCart,
-      totalQuantity,
-      subtotal,
       refresh,
     }),
     [
-      lines,
-      isAuthenticated,
+      items,
+      totalQuantity,
+      subtotal,
       isLoading,
       isSyncing,
       addToCart,
-      removeFromCart,
       updateQuantity,
+      removeFromCart,
       clearCart,
-      totalQuantity,
-      subtotal,
       refresh,
     ],
   );
@@ -301,7 +197,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
-/** Strongly-typed cart hook. */
 export function useCart(): CartContextValue {
   const ctx = useContext(CartContext);
   if (ctx === undefined) {

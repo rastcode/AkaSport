@@ -18,6 +18,7 @@ from typing import Any
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.generics import ListAPIView
@@ -28,10 +29,12 @@ from rest_framework.views import APIView
 from apps.authentication.permissions import IsAdmin
 from apps.orders.models import Cart, CartItem, Order
 from apps.orders.serializers import (
-    CartItemWriteSerializer,
+    AddCartItemSerializer,
     CartSerializer,
     CheckoutSerializer,
     OrderSerializer,
+    OrderStatusUpdateSerializer,
+    UpdateCartItemSerializer,
 )
 
 
@@ -52,8 +55,8 @@ class CartView(APIView):
         return Response(CartSerializer(cart, context={"request": request}).data)
 
     def post(self, request: Request) -> Response:
-        """Add a new item or update an existing line's quantity."""
-        serializer = CartItemWriteSerializer(data=request.data)
+        """افزودن یک ردیف یا به‌روزرسانی تعداد ردیف موجود (افزودنی یا جایگزین)."""
+        serializer = AddCartItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
@@ -73,13 +76,13 @@ class CartView(APIView):
                     item.quantity + quantity if mode == "add" else quantity
                 )
 
-            # Soft stock guard at cart time (hard check happens at checkout).
+            # کنترل نرم موجودی هنگام افزودن (کنترل قطعی در تسویه‌حساب انجام می‌شود).
             if item.quantity > variant.stock_quantity:
                 return Response(
                     {
                         "product_variant": (
-                            f"Only {variant.stock_quantity} unit(s) of "
-                            f"{variant.sku} are available."
+                            f"تنها {variant.stock_quantity} عدد از «{variant.sku}» "
+                            "موجود است."
                         )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
@@ -92,20 +95,51 @@ class CartView(APIView):
         )
 
     def delete(self, request: Request) -> Response:
-        """Empty the entire cart."""
+        """خالی کردن کامل سبد."""
         cart = self._get_cart(request)
         cart.clear()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class CartItemDeleteView(APIView):
-    """Remove a single line from the cart."""
+class CartItemDetailView(APIView):
+    """به‌روزرسانی تعداد (PATCH) یا حذف (DELETE) یک ردیف از سبد."""
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def delete(self, request: Request, item_id: int) -> Response:
+    def _get_item(self, request: Request, item_id: int) -> CartItem:
         cart = get_object_or_404(Cart, user=request.user)
-        item = get_object_or_404(CartItem, id=item_id, cart=cart)
+        return get_object_or_404(
+            CartItem.objects.select_related("product_variant"),
+            id=item_id,
+            cart=cart,
+        )
+
+    def patch(self, request: Request, item_id: int) -> Response:
+        item = self._get_item(request, item_id)
+        serializer = UpdateCartItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        quantity = serializer.validated_data["quantity"]
+
+        if quantity > item.product_variant.stock_quantity:
+            return Response(
+                {
+                    "quantity": (
+                        f"تنها {item.product_variant.stock_quantity} عدد از "
+                        f"«{item.product_variant.sku}» موجود است."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        item.quantity = quantity
+        item.save(update_fields=["quantity", "updated_at"])
+        return Response(
+            CartSerializer(item.cart, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request: Request, item_id: int) -> Response:
+        item = self._get_item(request, item_id)
+        cart = item.cart
         item.delete()
         return Response(
             CartSerializer(cart, context={"request": request}).data,
@@ -168,15 +202,53 @@ class OrderDetailView(APIView):
             Order.objects.prefetch_related("items"), id=order_id
         )
         if not getattr(request.user, "is_admin", False) and order.user_id != request.user.id:
-            # Hide existence from non-owners.
+            # وجود سفارش را از کاربر غیرمالک پنهان می‌کنیم.
             from rest_framework.exceptions import PermissionDenied
 
-            raise PermissionDenied("You do not have access to this order.")
+            raise PermissionDenied("شما به این سفارش دسترسی ندارید.")
         return order
 
     def get(self, request: Request, order_id: int) -> Response:
         order = self._get_order(request, order_id)
         return Response(OrderSerializer(order, context={"request": request}).data)
+
+
+class OrderStatusUpdateView(APIView):
+    """
+    تغییر وضعیت یک سفارش — فقط برای ADMIN/OWNER.
+
+    PATCH history/<id>/status/  body: {"status": "PROCESSING"}
+
+    قوانین:
+        - دسترسی فقط برای مدیر/مالک (IsAdmin)؛ مشتری حتی برای سفارش خودش 403.
+        - وضعیت نامعتبر → 400 با پیام فارسی.
+        - سفارش ناموجود → 404.
+        - پاسخ، سفارش کامل (OrderSerializer) است تا فرانت به‌سادگی refresh کند.
+    """
+
+    # IsAdmin شامل احراز هویت + نقش ADMIN/OWNER است (OWNER ابرمجموعه‌ی ADMIN).
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def patch(self, request: Request, order_id: int) -> Response:
+        order = get_object_or_404(Order, id=order_id)
+
+        serializer = OrderStatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_status = serializer.validated_data["status"]
+
+        if order.status != new_status:
+            order.status = new_status
+            update_fields = ["status", "updated_at"]
+            # همگام‌سازی ساده‌ی زمان پرداخت هنگام ورود به وضعیت «پرداخت‌شده».
+            if new_status == Order.Status.PAID and order.paid_at is None:
+                order.paid_at = timezone.now()
+                update_fields.append("paid_at")
+            order.save(update_fields=update_fields)
+
+        return Response(
+            OrderSerializer(order, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -201,16 +273,16 @@ class PaymentInitiationView(APIView):
         if not is_staff_role and order.user_id != request.user.id:
             from rest_framework.exceptions import PermissionDenied
 
-            raise PermissionDenied("You cannot pay for this order.")
+            raise PermissionDenied("شما اجازه‌ی پرداخت این سفارش را ندارید.")
 
         if order.status == Order.Status.PAID:
             return Response(
-                {"detail": "This order is already paid."},
+                {"detail": "این سفارش قبلاً پرداخت شده است."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if order.status == Order.Status.CANCELED:
             return Response(
-                {"detail": "A canceled order cannot be paid."},
+                {"detail": "سفارش لغوشده قابل پرداخت نیست."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

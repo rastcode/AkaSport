@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #46494c; /* iron-grey */
+  --background: #edf2f4; /* Platinum (brand-light) — پس‌زمینه‌ی صفحات */
+  --foreground: #2b2d42; /* Space Indigo (brand-dark) — متن اصلی */
 }
 
 html,

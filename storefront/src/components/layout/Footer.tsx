@@ -35,8 +35,8 @@ export function Footer() {
     ];
 
   return (
-    <footer dir="rtl" className="mt-12 border-t border-silver bg-dust-grey/40">
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <footer dir="rtl" className="mt-16 border-t border-silver/70 bg-brand-light/60">
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           <div className="col-span-2 md:col-span-1">
             <Logo />
@@ -67,7 +67,7 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-silver pt-6 text-sm text-blue-slate sm:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-silver/70 pt-6 text-sm text-blue-slate sm:flex-row">
           <span className="font-bold text-iron-grey">آکامارکت</span>
           <span>© {year} — تمامی حقوق محفوظ است.</span>
         </div>

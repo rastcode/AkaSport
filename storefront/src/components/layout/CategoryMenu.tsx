@@ -47,7 +47,7 @@ export function CategoryMenu() {
   return (
     <nav
       aria-label="دسته‌بندی محصولات"
-      className="border-b border-silver bg-white"
+      className="border-b border-silver/70 bg-white"
     >
       <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 sm:px-6 lg:px-8">
         {/* دکمه‌ی همه دسته‌ها + منوی بزرگ */}
@@ -60,7 +60,7 @@ export function CategoryMenu() {
             type="button"
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
-            className="flex items-center gap-2 py-3 text-sm font-bold text-iron-grey hover:text-bondi-blue"
+            className="flex items-center gap-2 py-2.5 text-sm font-bold text-iron-grey hover:text-brand-accent"
           >
             <MenuIcon className="h-5 w-5" />
             همه دسته‌ها
@@ -119,7 +119,7 @@ export function CategoryMenu() {
           <li>
             <Link
               href="/products"
-              className="rounded-lg px-3 py-3 text-sm font-bold text-discount hover:opacity-80"
+              className="rounded-lg px-3 py-3 text-sm font-bold text-brand-accent hover:text-brand-danger"
             >
               تخفیف‌های ویژه
             </Link>

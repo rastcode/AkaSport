@@ -95,12 +95,12 @@ export function ProductVariantSelector({ variants, selected, onSelect }: Props) 
                   onClick={() => chooseColor(color.id)}
                   aria-pressed={isSel}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex min-h-[2.5rem] items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
                     isSel
-                      ? "border-bondi-blue bg-bondi-blue text-white"
+                      ? "border-brand-accent bg-brand-accent text-white"
                       : avail
-                        ? "border-silver bg-white text-blue-slate hover:border-bondi-blue"
-                        : "border-dust-grey bg-dust-grey text-silver",
+                        ? "border-silver bg-white text-blue-slate hover:border-brand-accent"
+                        : "border-silver/50 bg-brand-light text-brand-muted",
                   )}
                 >
                   <span
@@ -130,12 +130,12 @@ export function ProductVariantSelector({ variants, selected, onSelect }: Props) 
                   onClick={() => chooseSize(size.id)}
                   aria-pressed={isSel}
                   className={cn(
-                    "min-w-[2.75rem] rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors",
+                    "min-h-[2.5rem] min-w-[2.75rem] rounded-xl border px-3 py-2 text-sm font-semibold transition-colors",
                     isSel
-                      ? "border-bondi-blue bg-bondi-blue text-white"
+                      ? "border-brand-accent bg-brand-accent text-white"
                       : avail
-                        ? "border-silver bg-white text-blue-slate hover:border-bondi-blue"
-                        : "border-dust-grey bg-dust-grey text-silver",
+                        ? "border-silver bg-white text-blue-slate hover:border-brand-accent"
+                        : "border-silver/50 bg-brand-light text-brand-muted",
                   )}
                 >
                   {size.name_fa}

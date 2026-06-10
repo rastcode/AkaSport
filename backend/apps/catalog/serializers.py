@@ -99,27 +99,51 @@ class SizeSerializer(serializers.ModelSerializer):
 # Images & variants
 # --------------------------------------------------------------------------- #
 class ProductImageSerializer(serializers.ModelSerializer):
-    """Product/variant image with an absolute URL."""
+    """
+    تصویر محصول/تنوع.
 
-    image = serializers.SerializerMethodField()
+    فیلد `image` هم برای خواندن و هم نوشتن است: روی خواندن، URL مطلق برمی‌گرداند
+    (با کمک request در context) و روی نوشتن، فایل تصویر را از multipart می‌پذیرد.
+    بنابراین رفتار قبلیِ خواندن (دریافت URL) حفظ می‌شود و آپلود نیز ممکن می‌شود.
+    """
+
+    image = serializers.ImageField(
+        error_messages={
+            "invalid_image": "فایل انتخاب‌شده یک تصویر معتبر نیست.",
+            "required": "انتخاب فایل تصویر الزامی است.",
+            "empty": "فایل تصویر خالی است.",
+            "no_name": "نام فایل تصویر نامعتبر است.",
+        }
+    )
 
     class Meta:
         model = ProductImage
         fields = (
             "id",
+            "product",
+            "variant",
             "image",
             "alt_text_fa",
             "is_primary",
             "display_order",
-            "variant",
+            "created_at",
         )
+        read_only_fields = ("id", "created_at")
+        extra_kwargs = {
+            "variant": {"required": False, "allow_null": True},
+            "alt_text_fa": {"required": False, "allow_blank": True},
+            "is_primary": {"required": False},
+            "display_order": {"required": False},
+        }
 
-    def get_image(self, obj: ProductImage) -> Optional[str]:
-        if not obj.image:
-            return None
-        request = self.context.get("request")
-        url = obj.image.url
-        return request.build_absolute_uri(url) if request else url
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        product = attrs.get("product") or getattr(self.instance, "product", None)
+        variant = attrs.get("variant") or getattr(self.instance, "variant", None)
+        if variant is not None and product is not None and variant.product_id != product.id:
+            raise serializers.ValidationError(
+                {"variant": "این تنوع متعلق به محصول انتخاب‌شده نیست."}
+            )
+        return attrs
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):

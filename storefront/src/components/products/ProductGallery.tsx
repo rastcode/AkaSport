@@ -12,6 +12,7 @@ import { useState } from "react";
 import Image from "next/image";
 
 import { resolveMediaUrl } from "@/services/catalogService";
+import { ProductImagePlaceholder } from "@/components/products/ProductImagePlaceholder";
 import type { ProductImage } from "@/types/catalog";
 
 export function ProductGallery({
@@ -39,7 +40,7 @@ export function ProductGallery({
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
-      <div className="relative aspect-square overflow-hidden rounded-2xl border border-silver bg-dust-grey/50">
+      <div className="relative aspect-square overflow-hidden rounded-2xl border border-silver/60 bg-brand-light">
         {activeUrl ? (
           <Image
             src={activeUrl}
@@ -50,10 +51,7 @@ export function ProductGallery({
             className="object-cover"
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-silver">
-            <span className="text-3xl font-black text-bondi-blue/25">آکا</span>
-            <span className="text-sm">بدون تصویر</span>
-          </div>
+          <ProductImagePlaceholder size="detail" />
         )}
       </div>
 

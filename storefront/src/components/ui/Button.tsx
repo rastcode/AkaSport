@@ -8,14 +8,16 @@ export type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT: Record<ButtonVariant, string> = {
+  // CTA اصلی فروشگاه — Strawberry Red با hover به Flag Red.
   primary:
-    "bg-bondi-blue text-white hover:bg-bondi-blue-dark focus:ring-bondi-blue/40",
+    "bg-brand-accent text-white hover:bg-brand-danger focus:ring-brand-accent/40",
+  // outline تمیز و premium با Space Indigo (نه قرمز).
   outline:
-    "border border-bondi-blue text-bondi-blue bg-white hover:bg-bondi-blue hover:text-white focus:ring-bondi-blue/30",
+    "border border-brand-dark text-brand-dark bg-white hover:bg-brand-dark hover:text-white focus:ring-brand-dark/30",
   ghost:
-    "border border-silver bg-white text-blue-slate hover:bg-dust-grey focus:ring-bondi-blue/30",
+    "border border-brand-muted/40 bg-white text-brand-dark hover:bg-brand-light focus:ring-brand-dark/20",
   danger:
-    "bg-discount text-white hover:opacity-90 focus:ring-discount/40",
+    "bg-brand-danger text-white hover:bg-brand-danger/90 focus:ring-brand-danger/40",
 };
 
 const SIZE: Record<ButtonSize, string> = {

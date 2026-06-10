@@ -18,25 +18,25 @@ export function ProductSpecifications({
       </h2>
 
       {entries.length === 0 ? (
-        <p className="rounded-xl border border-silver bg-dust-grey/40 p-5 text-sm text-blue-slate">
+        <p className="rounded-xl border border-silver/60 bg-brand-light/60 p-5 text-sm text-blue-slate">
           مشخصاتی برای این محصول ثبت نشده است.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-silver">
+        <div className="overflow-hidden rounded-xl border border-silver/60">
           <table className="w-full border-collapse text-sm">
             <tbody>
               {entries.map(([key, value], index) => (
                 <tr
                   key={key}
-                  className={index % 2 === 0 ? "bg-dust-grey/50" : "bg-white"}
+                  className={index % 2 === 0 ? "bg-brand-light/50" : "bg-white"}
                 >
                   <th
                     scope="row"
-                    className="w-1/3 border-b border-silver px-4 py-3 text-right font-semibold text-blue-slate"
+                    className="w-2/5 px-4 py-3.5 text-right font-semibold text-blue-slate sm:w-1/3"
                   >
                     {key}
                   </th>
-                  <td className="border-b border-silver px-4 py-3 text-iron-grey">
+                  <td className="px-4 py-3.5 leading-6 text-iron-grey">
                     {formatValue(value)}
                   </td>
                 </tr>

@@ -27,9 +27,23 @@ interface Props {
   brands: Brand[];
   colors: Color[];
   sizes: Size[];
+  /**
+   * در موبایل (`mobile`) به‌جای `<select>` نیتیو که از کادر drawer بیرون می‌زند،
+   * لیست انتخابِ سفارشیِ داخل drawer نمایش داده می‌شود. در دسکتاپ (پیش‌فرض)
+   * همان select نیتیو حفظ می‌شود.
+   */
+  variant?: "mobile" | "desktop";
 }
 
-export function CatalogFilters({ filters, categories, brands, colors, sizes }: Props) {
+export function CatalogFilters({
+  filters,
+  categories,
+  brands,
+  colors,
+  sizes,
+  variant = "desktop",
+}: Props) {
+  const isMobile = variant === "mobile";
   const router = useRouter();
 
   const [minPrice, setMinPrice] = useState(
@@ -67,13 +81,13 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
   }
 
   return (
-    <div dir="rtl" className="rounded-xl border border-silver bg-white p-5">
-      <div className="mb-4 flex items-center justify-between">
+    <div dir="rtl" className="rounded-2xl border border-silver/60 bg-white p-5">
+      <div className="mb-5 flex items-center justify-between">
         <h2 className="text-base font-bold text-iron-grey">فیلترها</h2>
         <button
           type="button"
           onClick={clearAll}
-          className="text-xs font-semibold text-bondi-blue hover:text-bondi-blue-dark"
+          className="rounded-lg px-2 py-1 text-xs font-semibold text-brand-accent transition-colors hover:bg-brand-accent/10"
         >
           حذف همه
         </button>
@@ -81,36 +95,59 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
 
       {/* دسته‌بندی */}
       <Group label="دسته‌بندی">
-        <select
-          className="input-field"
-          value={filters.category ?? ""}
-          onChange={(e) => apply({ category: e.target.value || undefined })}
-          aria-label="فیلتر دسته‌بندی"
-        >
-          <option value="">همه دسته‌ها</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.slug}>
-              {c.full_path || c.name_fa}
-            </option>
-          ))}
-        </select>
+        {isMobile ? (
+          <OptionList
+            ariaLabel="فیلتر دسته‌بندی"
+            allLabel="همه دسته‌ها"
+            selected={filters.category ?? ""}
+            options={categories.map((c) => ({
+              value: c.slug,
+              label: c.full_path || c.name_fa,
+            }))}
+            onSelect={(value) => apply({ category: value || undefined })}
+          />
+        ) : (
+          <select
+            className="input-field"
+            value={filters.category ?? ""}
+            onChange={(e) => apply({ category: e.target.value || undefined })}
+            aria-label="فیلتر دسته‌بندی"
+          >
+            <option value="">همه دسته‌ها</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.slug}>
+                {c.full_path || c.name_fa}
+              </option>
+            ))}
+          </select>
+        )}
       </Group>
 
       {/* برند */}
       <Group label="برند">
-        <select
-          className="input-field"
-          value={filters.brand ?? ""}
-          onChange={(e) => apply({ brand: e.target.value || undefined })}
-          aria-label="فیلتر برند"
-        >
-          <option value="">همه برندها</option>
-          {brands.map((b) => (
-            <option key={b.id} value={b.slug}>
-              {b.name_fa}
-            </option>
-          ))}
-        </select>
+        {isMobile ? (
+          <OptionList
+            ariaLabel="فیلتر برند"
+            allLabel="همه برندها"
+            selected={filters.brand ?? ""}
+            options={brands.map((b) => ({ value: b.slug, label: b.name_fa }))}
+            onSelect={(value) => apply({ brand: value || undefined })}
+          />
+        ) : (
+          <select
+            className="input-field"
+            value={filters.brand ?? ""}
+            onChange={(e) => apply({ brand: e.target.value || undefined })}
+            aria-label="فیلتر برند"
+          >
+            <option value="">همه برندها</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.slug}>
+                {b.name_fa}
+              </option>
+            ))}
+          </select>
+        )}
       </Group>
 
       {/* رنگ */}
@@ -127,14 +164,14 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
                   onClick={() => apply({ color: active ? undefined : value })}
                   aria-pressed={active}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    "flex min-h-[2.25rem] items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
                     active
-                      ? "border-bondi-blue bg-bondi-blue text-white"
-                      : "border-silver bg-white text-blue-slate hover:border-bondi-blue",
+                      ? "border-brand-accent bg-brand-accent/10 text-brand-dark"
+                      : "border-silver/70 bg-white text-blue-slate hover:border-brand-accent",
                   )}
                 >
                   <span
-                    className="h-3 w-3 rounded-full border border-silver"
+                    className="h-3.5 w-3.5 rounded-full border border-silver/70"
                     style={{ backgroundColor: color.hex_code || "#ccc" }}
                     aria-hidden
                   />
@@ -160,10 +197,10 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
                   onClick={() => apply({ size: active ? undefined : value })}
                   aria-pressed={active}
                   className={cn(
-                    "min-w-[2.75rem] rounded-lg border px-2 py-1 text-xs font-semibold transition-colors",
+                    "min-h-[2.25rem] min-w-[2.75rem] rounded-xl border px-3 py-1.5 text-sm font-semibold transition-colors",
                     active
-                      ? "border-bondi-blue bg-bondi-blue text-white"
-                      : "border-silver bg-white text-blue-slate hover:border-bondi-blue",
+                      ? "border-brand-accent bg-brand-accent/10 text-brand-dark"
+                      : "border-silver/70 bg-white text-blue-slate hover:border-brand-accent",
                   )}
                 >
                   {size.name_fa}
@@ -182,20 +219,20 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
             min={0}
             inputMode="numeric"
             placeholder="از"
-            className="input-field"
+            className="input-field flex-1"
             value={minPrice}
             onChange={(e) => setMinPrice(e.target.value)}
             onBlur={applyPrice}
             onKeyDown={(e) => e.key === "Enter" && applyPrice()}
             aria-label="حداقل قیمت"
           />
-          <span className="text-silver">تا</span>
+          <span className="shrink-0 text-xs text-brand-muted">تا</span>
           <input
             type="number"
             min={0}
             inputMode="numeric"
             placeholder="تا"
-            className="input-field"
+            className="input-field flex-1"
             value={maxPrice}
             onChange={(e) => setMaxPrice(e.target.value)}
             onBlur={applyPrice}
@@ -206,14 +243,14 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
         <button
           type="button"
           onClick={applyPrice}
-          className="mt-2 w-full rounded-lg border border-bondi-blue px-3 py-1.5 text-sm font-semibold text-bondi-blue transition-colors hover:bg-bondi-blue hover:text-white"
+          className="mt-2.5 w-full rounded-lg border border-silver/70 bg-brand-light px-3 py-2 text-sm font-semibold text-iron-grey transition-colors hover:border-brand-dark hover:bg-white"
         >
           اعمال قیمت
         </button>
       </Group>
 
       {/* سوییچ‌ها */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Toggle
           label="فقط کالاهای موجود"
           checked={Boolean(filters.in_stock)}
@@ -234,10 +271,74 @@ export function CatalogFilters({ filters, categories, brands, colors, sizes }: P
   );
 }
 
+/**
+ * انتخاب‌گر سفارشیِ داخلِ drawer (جایگزین select نیتیو در موبایل).
+ * گزینه‌ها داخل یک box با scroll داخلی‌اند و از کادر بیرون نمی‌زنند.
+ */
+function OptionList({
+  ariaLabel,
+  allLabel,
+  options,
+  selected,
+  onSelect,
+}: {
+  ariaLabel: string;
+  allLabel: string;
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  const all = [{ value: "", label: allLabel }, ...options];
+  return (
+    <div
+      role="listbox"
+      aria-label={ariaLabel}
+      className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-2xl border border-brand-muted/30 bg-white p-2"
+    >
+      {all.map((opt) => {
+        const active = selected === opt.value;
+        return (
+          <button
+            key={opt.value || "__all__"}
+            type="button"
+            role="option"
+            aria-selected={active}
+            onClick={() => onSelect(opt.value)}
+            className={cn(
+              "flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-right text-sm leading-6 transition-colors",
+              active
+                ? "border-brand-accent bg-brand-accent/10 font-semibold text-brand-dark"
+                : "border-transparent text-brand-dark/80 hover:bg-brand-light",
+            )}
+          >
+            <span className="break-words">{opt.label}</span>
+            {active && <CheckIcon />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 text-brand-accent"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      aria-hidden
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+    </svg>
+  );
+}
+
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-5 border-b border-dust-grey pb-5">
-      <h3 className="mb-2 text-sm font-semibold text-blue-slate">{label}</h3>
+    <div className="mb-4 border-b border-silver/40 pb-4">
+      <h3 className="mb-2.5 text-sm font-bold text-iron-grey">{label}</h3>
       {children}
     </div>
   );
@@ -253,10 +354,10 @@ function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-sm text-iron-grey">
+    <label className="flex min-h-[2.5rem] cursor-pointer items-center gap-2.5 rounded-lg px-2 text-sm text-iron-grey transition-colors hover:bg-brand-light">
       <input
         type="checkbox"
-        className="h-4 w-4 rounded border-silver text-bondi-blue focus:ring-bondi-blue"
+        className="h-4 w-4 rounded border-silver accent-brand-accent focus:ring-brand-accent"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />

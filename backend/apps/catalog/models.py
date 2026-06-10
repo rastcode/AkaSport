@@ -69,9 +69,10 @@ class Category(TimeStampedModel):
         verbose_name_plural = _("دسته‌بندی‌ها")
         ordering = ("display_order", "name_fa")
         constraints = [
-            models.UniqueConstraint(
-                fields=["parent", "name_fa"], name="uniq_category_name_per_parent"
-            )
+           models.UniqueConstraint(
+    fields=["parent", "name_fa"],
+    name="uniq_catalog_category_name_per_parent",
+)
         ]
         indexes = [models.Index(fields=["slug"]), models.Index(fields=["is_active"])]
 

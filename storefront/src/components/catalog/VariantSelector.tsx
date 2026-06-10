@@ -155,7 +155,7 @@ export function VariantSelector({
             )}
           </legend>
           <div className="flex flex-wrap gap-2">
-            {axes[axis].map((value) => {
+           {(axes[axis] ?? []).map((value) => {
               const selected = selection[axis] === value;
               const available = isValueAvailable(axis, value);
               return (

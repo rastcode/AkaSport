@@ -313,7 +313,7 @@ function LoginInner() {
             href="/register"
             className="font-semibold text-bondi-blue hover:text-bondi-blue-dark"
           >
-            ساخت حساب جدید
+            ثبت‌نام کنید
           </Link>
         </p>
       </div>

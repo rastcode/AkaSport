@@ -1,46 +1,74 @@
 """
-Serializers for carts, coupons and the atomic checkout flow.
+سریالایزرهای سبد خرید، کوپن و فرایند تسویه‌حساب (orders).
 
-The `CheckoutSerializer` is the critical path: it runs entirely inside
-`transaction.atomic()`, locks the affected inventory rows with
-`select_for_update()`, validates stock, prices the order via the Strategy
-layer, writes the `Order`/`OrderItem` snapshot, decrements stock, and clears
-the cart — all-or-nothing.
+اتصال به دامنه‌ی کاتالوگ جدید است: همه‌ی منطق قیمت/عنوان از
+`apps.catalog.ProductVariant` می‌آید (effective_price، product.title_fa، color،
+size، sku). `CheckoutSerializer` به‌صورت اتمیک، با قفل ردیف‌های موجودی
+(select_for_update)، موجودی را بررسی می‌کند، سفارش و اقلام فریزشده را می‌سازد،
+موجودی را کم می‌کند، فروش محصول را افزایش می‌دهد و سبد را خالی می‌کند.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 
 from django.db import transaction
-from django.utils import timezone
+from django.db.models import F
 from rest_framework import serializers
 
-from apps.orders.models import (
-    Cart,
-    CartItem,
-    Coupon,
-    Order,
-    OrderItem,
-)
-from apps.orders.strategies import (
-    LineSpec,
-    get_pricing_strategy,
-    resolve_unit_weight_g,
-)
-from apps.products.models import ProductVariant
+from apps.catalog.models import ProductVariant
+from apps.orders.models import Cart, CartItem, Coupon, Order, OrderItem
+
+# قانون ساده‌ی هزینه‌ی ارسال (تومان).
+FREE_SHIPPING_THRESHOLD = Decimal("5000000")
+FLAT_SHIPPING_COST = Decimal("150000")
+
+
+# --------------------------------------------------------------------------- #
+# کمک‌تابع‌ها
+# --------------------------------------------------------------------------- #
+def variant_label(variant: ProductVariant) -> str:
+    """برچسب خوانای تنوع از رنگ/سایز، مثل «مشکی - ۴۲»."""
+    parts = []
+    if variant.color:
+        parts.append(variant.color.name_fa)
+    if variant.size:
+        parts.append(variant.size.name_fa)
+    return " - ".join(parts)
+
+
+def variant_image_url(variant: ProductVariant, request) -> Optional[str]:
+    """نخستین تصویرِ تنوع، در غیر این صورت تصویر اصلی محصول، در غیر این صورت None."""
+    image = variant.images.first() if hasattr(variant, "images") else None
+    if image is None:
+        image = variant.product.images.first() if variant.product_id else None
+    if image is None or not image.image:
+        return None
+    url = image.image.url
+    return request.build_absolute_uri(url) if request else url
 
 
 # ======================================================================= #
-# Cart serializers
+# سبد خرید
 # ======================================================================= #
 class CartItemSerializer(serializers.ModelSerializer):
-    """Read representation of a cart line."""
+    """نمایش یک ردیف سبد با اطلاعات کافی برای فرانت."""
 
+    product_variant = serializers.IntegerField(source="product_variant_id", read_only=True)
     sku = serializers.CharField(source="product_variant.sku", read_only=True)
-    product_title = serializers.CharField(
-        source="product_variant.product.title", read_only=True
+    product_title_fa = serializers.CharField(
+        source="product_variant.product.title_fa", read_only=True
+    )
+    product_slug = serializers.CharField(
+        source="product_variant.product.slug", read_only=True
+    )
+    variant_label = serializers.SerializerMethodField()
+    color = serializers.CharField(
+        source="product_variant.color.name_fa", read_only=True, default=None
+    )
+    size = serializers.CharField(
+        source="product_variant.size.name_fa", read_only=True, default=None
     )
     unit_price = serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True
@@ -51,6 +79,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     available_stock = serializers.IntegerField(
         source="product_variant.stock_quantity", read_only=True
     )
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
@@ -58,41 +87,55 @@ class CartItemSerializer(serializers.ModelSerializer):
             "id",
             "product_variant",
             "sku",
-            "product_title",
-            "quantity",
+            "product_title_fa",
+            "product_slug",
+            "variant_label",
+            "color",
+            "size",
             "unit_price",
+            "quantity",
             "line_total",
             "available_stock",
+            "image",
         )
-        read_only_fields = ("id",)
+        read_only_fields = fields
+
+    def get_variant_label(self, obj: CartItem) -> str:
+        return variant_label(obj.product_variant)
+
+    def get_image(self, obj: CartItem) -> Optional[str]:
+        return variant_image_url(obj.product_variant, self.context.get("request"))
 
 
-class CartItemWriteSerializer(serializers.Serializer):
-    """
-    Payload for adding / updating a cart line.
+class AddCartItemSerializer(serializers.Serializer):
+    """افزودن/به‌روزرسانی یک ردیف سبد.
 
-    `mode` controls quantity semantics:
-        * "set"  (default) - quantity becomes exactly the supplied value.
-        * "add"            - quantity is incremented by the supplied value.
+    `mode`: "add" مقدار را اضافه می‌کند، "set" مقدار را جایگزین می‌کند.
     """
 
     product_variant = serializers.PrimaryKeyRelatedField(
         queryset=ProductVariant.objects.all()
     )
     quantity = serializers.IntegerField(min_value=1)
-    mode = serializers.ChoiceField(choices=("set", "add"), default="set")
+    mode = serializers.ChoiceField(choices=("add", "set"), default="add")
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         variant: ProductVariant = attrs["product_variant"]
         if not variant.is_active:
             raise serializers.ValidationError(
-                {"product_variant": "This variant is not available for purchase."}
+                {"product_variant": "این کالا برای خرید در دسترس نیست."}
             )
         return attrs
 
 
+class UpdateCartItemSerializer(serializers.Serializer):
+    """به‌روزرسانی تعداد یک ردیف سبد (PATCH)."""
+
+    quantity = serializers.IntegerField(min_value=1)
+
+
 class CartSerializer(serializers.ModelSerializer):
-    """Full cart representation with aggregates."""
+    """نمایش کامل سبد همراه با جمع‌ها."""
 
     items = CartItemSerializer(many=True, read_only=True)
     total_quantity = serializers.IntegerField(read_only=True)
@@ -116,7 +159,7 @@ class CartSerializer(serializers.ModelSerializer):
 
 
 # ======================================================================= #
-# Coupon
+# کوپن
 # ======================================================================= #
 class CouponSerializer(serializers.ModelSerializer):
     class Meta:
@@ -136,10 +179,17 @@ class CouponSerializer(serializers.ModelSerializer):
 
 
 # ======================================================================= #
-# Order representation
+# سفارش
 # ======================================================================= #
 class OrderItemSerializer(serializers.ModelSerializer):
-    line_total = serializers.DecimalField(
+    """اقلام فریزشده‌ی سفارش با کلیدهای موردنظر فرانت."""
+
+    sku = serializers.CharField(source="variant_sku", read_only=True)
+    product_title_fa = serializers.CharField(source="product_title", read_only=True)
+    unit_price = serializers.DecimalField(
+        source="price_at_purchase", max_digits=12, decimal_places=2, read_only=True
+    )
+    total_price = serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True
     )
 
@@ -148,13 +198,30 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "product_variant",
-            "variant_sku",
-            "product_title",
+            "sku",
+            "product_title_fa",
+            "variant_label",
+            "unit_price",
             "quantity",
-            "price_at_purchase",
-            "line_total",
+            "total_price",
         )
         read_only_fields = fields
+
+
+class OrderStatusUpdateSerializer(serializers.Serializer):
+    """به‌روزرسانی وضعیت سفارش توسط مدیر/مالک (فقط فیلد status).
+
+    مقادیر مجاز همان `Order.Status` هستند؛ پیام خطا فارسی است.
+    """
+
+    status = serializers.ChoiceField(
+        choices=Order.Status.choices,
+        error_messages={
+            "invalid_choice": "وضعیت انتخابی نامعتبر است.",
+            "required": "وضعیت سفارش الزامی است.",
+            "blank": "وضعیت سفارش الزامی است.",
+        },
+    )
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -177,7 +244,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "coupon",
             "coupon_code",
             "shipping_address",
-            "pricing_strategy",
+            "receiver_name",
+            "receiver_phone",
             "item_count",
             "items",
             "paid_at",
@@ -188,35 +256,32 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 # ======================================================================= #
-# Checkout
+# تسویه‌حساب
 # ======================================================================= #
 class CheckoutSerializer(serializers.Serializer):
-    """
-    Execute a checkout for the requesting user's cart.
+    """اجرای تسویه‌حساب اتمیک برای سبد کاربر.
 
-    Input:
-        shipping_address : structured JSON snapshot (required).
-        coupon_code      : optional discount code.
-        strategy         : optional explicit pricing strategy override.
-
-    Output (`to_representation`): the created `Order`.
+    ورودی:
+        receiver_name   : نام گیرنده (الزامی)
+        receiver_phone  : شماره گیرنده (الزامی)
+        shipping_address: آدرس ساختاریافته (الزامی؛ شامل province/city/line1)
+        coupon_code     : کد تخفیف (اختیاری)
     """
 
+    receiver_name = serializers.CharField(max_length=150)
+    receiver_phone = serializers.CharField(max_length=16)
     shipping_address = serializers.JSONField()
     coupon_code = serializers.CharField(required=False, allow_blank=True)
-    strategy = serializers.CharField(required=False, allow_blank=True)
 
-    # ---------------------------- validation --------------------------- #
+    # ---------------------------- اعتبارسنجی --------------------------- #
     def validate_shipping_address(self, value: Any) -> dict[str, Any]:
         if not isinstance(value, dict) or not value:
-            raise serializers.ValidationError(
-                "shipping_address must be a non-empty JSON object."
-            )
-        required = {"line1", "city", "country"}
-        missing = required - set(value)
+            raise serializers.ValidationError("آدرس ارسال باید یک شیء معتبر باشد.")
+        required = {"province", "city", "line1"}
+        missing = required - set(k for k, v in value.items() if str(v).strip())
         if missing:
             raise serializers.ValidationError(
-                f"shipping_address is missing required keys: {sorted(missing)}."
+                "آدرس ارسال ناقص است؛ استان، شهر و آدرس دقیق الزامی‌اند."
             )
         return value
 
@@ -228,17 +293,16 @@ class CheckoutSerializer(serializers.Serializer):
             .first()
         )
         if cart is None or cart.is_empty:
-            raise serializers.ValidationError("Your cart is empty.")
+            raise serializers.ValidationError("سبد خرید شما خالی است.")
         attrs["cart"] = cart
 
-        # Resolve coupon (existence + validity) up front for a clean 400.
         code = (attrs.get("coupon_code") or "").strip().upper()
         coupon = None
         if code:
             coupon = Coupon.objects.filter(code=code).first()
             if coupon is None:
                 raise serializers.ValidationError(
-                    {"coupon_code": "This coupon code does not exist."}
+                    {"coupon_code": "این کد تخفیف وجود ندارد."}
                 )
             reason = coupon.validation_error()
             if reason:
@@ -246,18 +310,18 @@ class CheckoutSerializer(serializers.Serializer):
         attrs["coupon"] = coupon
         return attrs
 
-    # ------------------------------ create ----------------------------- #
+    # ------------------------------ ایجاد ----------------------------- #
     def create(self, validated_data: dict[str, Any]) -> Order:
         user = self.context["request"].user
         cart: Cart = validated_data["cart"]
-        coupon: Coupon | None = validated_data["coupon"]
+        coupon: Optional[Coupon] = validated_data["coupon"]
         shipping_address: dict[str, Any] = validated_data["shipping_address"]
-        strategy_name = (validated_data.get("strategy") or "").strip() or None
+        receiver_name: str = validated_data["receiver_name"].strip()
+        receiver_phone: str = validated_data["receiver_phone"].strip()
 
         try:
             with transaction.atomic():
-                # 1) Lock the variant rows for the cart to serialise concurrent
-                #    checkouts and prevent overselling.
+                # ۱) قفل ردیف‌های تنوع برای جلوگیری از فروش بیش از موجودی.
                 cart_items = list(
                     cart.items.select_related("product_variant__product").all()
                 )
@@ -265,91 +329,112 @@ class CheckoutSerializer(serializers.Serializer):
                 locked = {
                     v.id: v
                     for v in ProductVariant.objects.select_for_update()
-                    .select_related("product")
+                    .select_related("product", "color", "size")
                     .filter(id__in=variant_ids)
                 }
 
-                # 2) Validate stock and build normalised pricing lines.
-                lines: list[LineSpec] = []
+                # ۲) بررسی موجودی و ساخت خطوط قیمت‌گذاری.
+                lines: list[dict[str, Any]] = []
                 stock_errors: list[str] = []
                 for ci in cart_items:
                     variant = locked.get(ci.product_variant_id)
                     if variant is None or not variant.is_active:
                         stock_errors.append(
-                            f"{ci.product_variant.sku}: no longer available."
+                            f"«{ci.product_variant.sku}» دیگر موجود نیست."
                         )
                         continue
                     if ci.quantity > variant.stock_quantity:
                         stock_errors.append(
-                            f"{variant.sku}: requested {ci.quantity}, "
-                            f"only {variant.stock_quantity} in stock."
+                            f"«{variant.sku}»: درخواست {ci.quantity} عدد، "
+                            f"تنها {variant.stock_quantity} عدد موجود است."
                         )
                         continue
+                    unit_price = variant.effective_price
                     lines.append(
-                        LineSpec(
-                            sku=variant.sku,
-                            title=variant.product.title,
-                            quantity=ci.quantity,
-                            unit_price=variant.final_price,
-                            unit_weight_g=resolve_unit_weight_g(variant),
-                            variant_id=variant.id,
-                        )
+                        {
+                            "variant": variant,
+                            "quantity": ci.quantity,
+                            "unit_price": unit_price,
+                            "total": unit_price * ci.quantity,
+                        }
                     )
 
                 if stock_errors:
-                    # Raising inside atomic() rolls everything back.
+                    # raise داخل atomic همه‌چیز را rollback می‌کند.
                     raise serializers.ValidationError({"stock": stock_errors})
 
-                # 3) Price the order via the Strategy layer.
-                strategy = get_pricing_strategy(name=strategy_name, user=user)
-                breakdown = strategy.calculate(lines, coupon=coupon)
+                # ۳) قیمت‌گذاری ساده و قابل فهم.
+                subtotal = sum((ln["total"] for ln in lines), Decimal("0"))
+                discount = self._coupon_discount(subtotal, coupon)
+                discount = min(discount, subtotal)
+                shipping = (
+                    Decimal("0")
+                    if subtotal >= FREE_SHIPPING_THRESHOLD
+                    else FLAT_SHIPPING_COST
+                )
+                total = subtotal - discount + shipping
 
-                # 4) Persist the Order.
+                # ۴) ساخت سفارش.
                 order = Order.objects.create(
                     user=user,
                     status=Order.Status.PENDING,
-                    subtotal=breakdown.subtotal,
-                    discount_amount=breakdown.discount_amount,
-                    shipping_cost=breakdown.shipping_cost,
-                    total_amount=breakdown.total_amount,
+                    subtotal=subtotal,
+                    discount_amount=discount,
+                    shipping_cost=shipping,
+                    total_amount=total,
                     coupon=coupon,
                     shipping_address=shipping_address,
-                    pricing_strategy=breakdown.strategy,
+                    receiver_name=receiver_name,
+                    receiver_phone=receiver_phone,
                 )
 
-                # 5) Snapshot line items + decrement inventory.
+                # ۵) ساخت اقلام فریزشده + کاهش موجودی + افزایش فروش محصول.
                 order_items: list[OrderItem] = []
-                for line in lines:
-                    variant = locked[line.variant_id]
+                for ln in lines:
+                    variant = ln["variant"]
                     order_items.append(
                         OrderItem(
                             order=order,
                             product_variant=variant,
-                            variant_sku=line.sku,
-                            product_title=line.title,
-                            quantity=line.quantity,
-                            price_at_purchase=line.unit_price,
+                            variant_sku=variant.sku,
+                            product_title=variant.product.title_fa,
+                            variant_label=variant_label(variant),
+                            quantity=ln["quantity"],
+                            price_at_purchase=ln["unit_price"],
+                            total_price=ln["total"],
                         )
                     )
-                    variant.stock_quantity -= line.quantity
+                    variant.stock_quantity -= ln["quantity"]
                     variant.save(update_fields=["stock_quantity", "updated_at"])
+                    # افزایش شمارنده‌ی فروش محصول.
+                    type(variant.product).objects.filter(pk=variant.product_id).update(
+                        sold_count=F("sold_count") + ln["quantity"]
+                    )
 
                 OrderItem.objects.bulk_create(order_items)
 
-                # 6) Register coupon usage and clear the cart.
+                # ۶) ثبت استفاده‌ی کوپن + خالی کردن سبد.
                 if coupon is not None:
                     coupon.register_use()
                 cart.clear()
 
         except serializers.ValidationError:
             raise
-        except Exception as exc:  # pragma: no cover - defensive guard
+        except Exception as exc:  # pragma: no cover - گارد دفاعی
             raise serializers.ValidationError(
-                {"detail": f"Checkout failed and was rolled back: {exc}"}
+                {"detail": f"تسویه‌حساب ناموفق بود و لغو شد: {exc}"}
             ) from exc
 
         self._order = order
         return order
+
+    @staticmethod
+    def _coupon_discount(subtotal: Decimal, coupon: Optional[Coupon]) -> Decimal:
+        if coupon is None:
+            return Decimal("0")
+        if coupon.discount_type == Coupon.DiscountType.PERCENTAGE:
+            return (subtotal * coupon.value / Decimal("100")).quantize(Decimal("1"))
+        return Decimal(coupon.value)
 
     def to_representation(self, instance: Order) -> dict[str, Any]:
         order = getattr(self, "_order", instance)

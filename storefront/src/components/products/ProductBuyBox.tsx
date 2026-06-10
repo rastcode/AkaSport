@@ -4,16 +4,21 @@
  * جعبه‌ی خرید و قیمت (RTL / فارسی) — Client Component.
  *
  * قیمت بر اساس تنوع انتخاب‌شده (یا قیمت محصول در نبود تنوع) نمایش داده می‌شود.
- * چون سرویس سبد خرید بک‌اند هنوز آماده نیست، دکمه‌ی «افزودن به سبد خرید» فقط
- * یک پیام فارسی نشان می‌دهد و به بک‌اند وصل نیست.
+ * دکمه‌ی «افزودن به سبد خرید» به سبد واقعی بک‌اند (CartContext → /api/orders/cart/)
+ * وصل است و فقط برای کاربر لاگین‌شده کار می‌کند.
  */
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { Price } from "@/components/ui/Price";
 import { DiscountBadge } from "@/components/ui/Badge";
+import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
 import { formatNumber } from "@/lib/persian";
 import type { ProductDetail, ProductVariant } from "@/types/catalog";
+
+type NoticeKind = "success" | "info" | "login";
 
 function discountPercent(price: string, discount: string | null): number {
   const p = Number(price);
@@ -29,8 +34,12 @@ export function ProductBuyBox({
   product: ProductDetail;
   selectedVariant: ProductVariant | null;
 }) {
+  const { isAuthenticated } = useAuth();
+  const { addToCart, isSyncing } = useCart();
+
   const [quantity, setQuantity] = useState(1);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: NoticeKind; text: string } | null>(null);
+  const [adding, setAdding] = useState(false);
 
   // قیمت/موجودی بر اساس تنوع انتخاب‌شده یا خود محصول.
   const basePrice = selectedVariant ? selectedVariant.price : product.base_price;
@@ -44,15 +53,39 @@ export function ProductBuyBox({
   const maxQty = selectedVariant?.stock_quantity ?? 0;
   const lowStock = inStock && maxQty > 0 && maxQty <= 3;
 
-  function handleAddToCart() {
-    // سبد خرید واقعی در مرحله‌ی بعد فعال می‌شود؛ فعلاً فقط پیام نمایش می‌دهیم.
-    setNotice("سبد خرید در مرحله بعد فعال می‌شود.");
+  // آیا محصول تنوع فعال دارد؟ (در این صورت انتخاب تنوع الزامی است)
+  const requiresVariant = product.variants.some((v) => v.is_active);
+
+  async function handleAddToCart() {
+    setNotice(null);
+
+    if (!isAuthenticated) {
+      setNotice({ kind: "login", text: "برای افزودن به سبد ابتدا وارد حساب کاربری شوید." });
+      return;
+    }
+    if (requiresVariant && !selectedVariant) {
+      setNotice({ kind: "info", text: "لطفاً رنگ یا سایز موردنظر را انتخاب کنید." });
+      return;
+    }
+    if (!selectedVariant || !selectedVariant.is_in_stock) {
+      return;
+    }
+
+    setAdding(true);
+    try {
+      await addToCart(selectedVariant.id, quantity);
+      setNotice({ kind: "success", text: "محصول به سبد خرید اضافه شد." });
+    } catch {
+      setNotice({ kind: "info", text: "افزودن به سبد ناموفق بود. لطفاً دوباره تلاش کنید." });
+    } finally {
+      setAdding(false);
+    }
   }
 
   return (
     <div
       dir="rtl"
-      className="rounded-2xl border border-silver bg-white p-5 lg:sticky lg:top-24"
+      className="rounded-2xl border border-silver/60 bg-white p-5 shadow-[0_1px_2px_rgba(43,45,66,0.06)] lg:sticky lg:top-24 lg:shadow-card"
     >
       {/* قیمت + نشان تخفیف */}
       <div className="flex items-start justify-between gap-2">
@@ -125,23 +158,46 @@ export function ProductBuyBox({
         </div>
       )}
 
-      {/* افزودن به سبد (فعلاً فقط UI) */}
+      {/* افزودن به سبد خرید (متصل به سبد واقعی) */}
       <button
         type="button"
         onClick={handleAddToCart}
-        disabled={!inStock}
+        disabled={!inStock || adding || isSyncing}
         className="btn-primary mt-5 w-full"
       >
-        افزودن به سبد خرید
+        {adding ? "در حال افزودن…" : "افزودن به سبد خرید"}
       </button>
 
       {notice && (
-        <p
+        <div
           role="status"
-          className="mt-3 rounded-lg border border-bondi-blue/30 bg-bondi-blue/10 px-3 py-2 text-center text-sm text-bondi-blue-dark"
+          className={
+            "mt-3 rounded-lg border px-3 py-2 text-center text-sm " +
+            (notice.kind === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : notice.kind === "login"
+                ? "border-brand-accent/30 bg-brand-accent/10 text-brand-accent"
+                : "border-amber-200 bg-amber-50 text-amber-700")
+          }
         >
-          {notice}
-        </p>
+          <p>{notice.text}</p>
+          {notice.kind === "success" && (
+            <Link
+              href="/cart"
+              className="mt-1 inline-block font-semibold text-bondi-blue hover:text-bondi-blue-dark"
+            >
+              مشاهده سبد خرید ←
+            </Link>
+          )}
+          {notice.kind === "login" && (
+            <Link
+              href={`/login?next=/product/${product.slug}`}
+              className="mt-1 inline-block font-semibold text-bondi-blue hover:text-bondi-blue-dark"
+            >
+              ورود به حساب کاربری ←
+            </Link>
+          )}
+        </div>
       )}
     </div>
   );

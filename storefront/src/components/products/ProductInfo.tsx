@@ -14,7 +14,7 @@ export function ProductInfo({ product }: { product: ProductDetail }) {
       {product.brand && (
         <Link
           href={`/products?brand=${encodeURIComponent(product.brand.slug)}`}
-          className="inline-block rounded-full bg-bondi-blue/10 px-3 py-1 text-xs font-semibold text-bondi-blue-dark hover:bg-bondi-blue/20"
+          className="inline-block rounded-full bg-brand-accent/10 px-3 py-1 text-xs font-semibold text-brand-accent hover:bg-brand-accent/20"
         >
           {product.brand.name_fa}
         </Link>

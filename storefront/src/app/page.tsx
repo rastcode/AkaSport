@@ -27,6 +27,19 @@ function results(
   return res?.results ?? [];
 }
 
+/** حذف محصولات تکراری بر اساس slug (با حفظ ترتیب اولویت). */
+function dedupeBySlug(list: ProductListItem[]): ProductListItem[] {
+  const seen = new Set<string>();
+  const out: ProductListItem[] = [];
+  for (const p of list) {
+    if (!seen.has(p.slug)) {
+      seen.add(p.slug);
+      out.push(p);
+    }
+  }
+  return out;
+}
+
 export default async function HomePage() {
   // دریافت موازی همه‌ی بخش‌ها؛ هر کدام مستقل و تحمل‌پذیرِ خطاست.
   const [tree, discounted, bestSelling, newest, featured] = await Promise.all([
@@ -37,9 +50,16 @@ export default async function HomePage() {
     getProducts({ is_featured: true }).catch(() => null),
   ]);
 
+  // محصولات چرخ قهرمان: اولویت featured → discounted → newest، بدون تکرار، حداکثر ۶.
+  const heroProducts = dedupeBySlug([
+    ...results(featured),
+    ...results(discounted),
+    ...results(newest),
+  ]).slice(0, 6);
+
   return (
     <main dir="rtl" className="bg-white">
-      <HeroBanner />
+      <HeroBanner products={heroProducts} />
 
       <CategoryShortcutGrid categories={tree} />
 

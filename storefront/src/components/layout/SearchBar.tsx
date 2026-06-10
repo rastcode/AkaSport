@@ -25,22 +25,22 @@ export function SearchBar({ className }: { className?: string }) {
       onSubmit={onSubmit}
       role="search"
       className={cn(
-        "flex w-full items-center gap-2 rounded-xl border border-silver bg-dust-grey/60 px-3 py-2 transition-colors focus-within:border-bondi-blue focus-within:bg-white",
+        "flex w-full items-center gap-2 rounded-full border border-silver/70 bg-brand-light/70 py-1.5 pr-4 pl-1.5 transition-colors focus-within:border-brand-accent/50 focus-within:bg-white",
         className,
       )}
     >
-      <SearchIcon className="h-5 w-5 shrink-0 text-blue-slate" />
+      <SearchIcon className="h-5 w-5 shrink-0 text-brand-muted" />
       <input
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="جست‌وجو در آکامارکت…"
         aria-label="جست‌وجوی محصولات"
-        className="w-full bg-transparent text-sm text-iron-grey placeholder:text-blue-slate/70 focus:outline-none"
+        className="w-full bg-transparent text-sm text-iron-grey placeholder:text-brand-muted focus:outline-none"
       />
       <button
         type="submit"
-        className="shrink-0 rounded-lg bg-bondi-blue px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-bondi-blue-dark"
+        className="shrink-0 rounded-full bg-brand-accent px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-danger"
       >
         جست‌وجو
       </button>

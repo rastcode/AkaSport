@@ -1,30 +1,34 @@
 import Link from "next/link";
 
-import { buttonClass } from "@/components/ui/Button";
+import { buttonClass } from "@/components/ui/buttonStyles";
+import { HeroProductWheel } from "@/components/home/HeroProductWheel";
+import type { ProductListItem } from "@/types/catalog";
 
 /**
  * بخش قهرمان صفحه‌ی اصلی (RTL / فارسی) — Server Component.
- * فقط متن و لینک‌های ثابت فارسی؛ هیچ داده‌ی محصولِ ساختگی ندارد.
+ *
+ * متن و CTAهای ثابت فارسی در یک ستون و «چرخ محصولات ویژه» (تعاملی) در ستون دیگر.
+ * محصولاتِ واقعی از صفحه پاس داده می‌شوند؛ هیچ داده‌ی ساختگی نیست.
  */
-export function HeroBanner() {
+export function HeroBanner({ products = [] }: { products?: ProductListItem[] }) {
   return (
     <section
       dir="rtl"
-      className="bg-gradient-to-bl from-dust-grey via-white to-silver/40"
+      className="bg-gradient-to-bl from-brand-light via-white to-brand-light"
     >
-      <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-16">
+      <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 py-9 sm:px-6 sm:py-12 lg:grid-cols-2 lg:px-8 lg:py-16">
         <div className="animate-fade-in-up text-center lg:text-right">
-          <span className="inline-block rounded-full bg-bondi-blue/10 px-3 py-1 text-xs font-semibold text-bondi-blue-dark">
+          <span className="inline-block rounded-full bg-brand-accent/10 px-3 py-1 text-xs font-semibold text-brand-accent">
             بازارگاه تخصصی ورزش
           </span>
-          <h1 className="mt-4 text-3xl font-extrabold leading-tight text-iron-grey sm:text-4xl lg:text-5xl">
-            خرید لوازم ورزشی، <span className="text-bondi-blue">راحت‌تر و سریع‌تر</span>
+          <h1 className="mt-4 text-[1.7rem] font-extrabold leading-[1.35] text-iron-grey sm:text-4xl lg:text-5xl lg:leading-tight">
+            خرید لوازم ورزشی، <span className="text-brand-accent">راحت‌تر و سریع‌تر</span>
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-blue-slate sm:text-lg">
+          <p className="mt-3 text-sm leading-relaxed text-blue-slate sm:mt-4 sm:text-lg">
             از کفش و پوشاک ورزشی تا تجهیزات باشگاه و کوهنوردی؛ همه‌چیز برای شروع
             تمرین بعدی شما.
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:mt-8 lg:justify-start">
             <Link href="/products" className={buttonClass("primary", "lg", "px-8")}>
               مشاهده محصولات
             </Link>
@@ -37,16 +41,9 @@ export function HeroBanner() {
           </div>
         </div>
 
-        {/* کارت تزئینی (بدون داده‌ی محصول) */}
-        <div className="relative hidden lg:block">
-          <div className="aspect-[4/3] overflow-hidden rounded-3xl border border-silver bg-white shadow-card">
-            <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-tr from-bondi-blue/15 via-dust-grey to-blue-slate/10">
-              <span className="text-6xl font-black text-bondi-blue/30">آکامارکت</span>
-              <span className="mt-3 text-sm font-semibold text-blue-slate">
-                تجهیز شو، فراتر برو
-              </span>
-            </div>
-          </div>
+        {/* چرخ محصولات ویژه (تعاملی، با محصولات واقعی) */}
+        <div className="relative flex items-center justify-center">
+          <HeroProductWheel products={products} />
         </div>
       </div>
     </section>

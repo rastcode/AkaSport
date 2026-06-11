@@ -22,6 +22,9 @@ import type {
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
+const MEDIA_BASE = (
+  process.env.NEXT_PUBLIC_MEDIA_BASE_URL || API_BASE.replace(/\/api\/?$/, "")
+).replace(/\/+$/, "");
 
 /** مسیر پایه‌ی همه‌ی endpointهای کاتالوگ. */
 const CATALOG_BASE = `${API_BASE}/catalog`;
@@ -160,6 +163,21 @@ export async function getProductBySlug(
 export function resolveMediaUrl(url: string | null): string | null {
   if (!url) return null;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  const origin = API_BASE.replace(/\/api\/?$/, "");
-  return `${origin}${url.startsWith("/") ? "" : "/"}${url}`;
+
+  const mediaPath = `/${url.replace(/^\/+/, "")}`;
+  try {
+    const mediaBaseUrl = new URL(MEDIA_BASE);
+    const basePath = mediaBaseUrl.pathname.replace(/\/+$/, "");
+    if (
+      basePath &&
+      basePath !== "/" &&
+      (mediaPath === basePath || mediaPath.startsWith(`${basePath}/`))
+    ) {
+      return `${mediaBaseUrl.origin}${mediaPath}`;
+    }
+  } catch {
+    // Invalid configuration falls back to a simple, predictable join.
+  }
+
+  return `${MEDIA_BASE}${mediaPath}`;
 }

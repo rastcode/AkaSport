@@ -125,6 +125,7 @@ if (!active) {
                   alt={item.title_fa}
                   fill
                   sizes="160px"
+                  priority={i === 0}
                   className={
                     "object-contain transition-[filter] duration-300 " +
                     (isActive
@@ -188,7 +189,15 @@ function FallbackVisual({ single }: { single?: ProductListItem }) {
       >
         <div className="relative aspect-[4/3] w-full bg-white">
           {url ? (
-            <Image key={url} src={url} alt={single.title_fa} fill sizes="(max-width:1024px) 90vw, 40vw" className="object-contain p-4" />
+            <Image
+              key={url}
+              src={url}
+              alt={single.title_fa}
+              fill
+              priority
+              sizes="(max-width: 640px) 90vw, (max-width: 1024px) 50vw, 40vw"
+              className="object-contain p-4"
+            />
           ) : (
             <ProductImagePlaceholder size="detail" />
           )}

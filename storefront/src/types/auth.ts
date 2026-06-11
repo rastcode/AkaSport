@@ -9,6 +9,21 @@
 /** The three RBAC roles returned by the backend. */
 export type UserRole = "OWNER" | "ADMIN" | "CUSTOMER";
 
+export const ADMIN_PERMISSION_KEYS = [
+  "can_manage_products",
+  "can_manage_categories",
+  "can_manage_orders",
+  "can_manage_coupons",
+  "can_manage_reviews",
+  "can_manage_site_settings",
+  "can_view_analytics",
+  "can_manage_chat",
+  "can_manage_users",
+] as const;
+
+export type AdminPermissionKey = (typeof ADMIN_PERMISSION_KEYS)[number];
+export type AdminPermissions = Record<AdminPermissionKey, boolean>;
+
 /** Authenticated user profile (subset of the backend `/auth/me/` response). */
 export interface User {
   id: number;
@@ -18,6 +33,7 @@ export interface User {
   first_name?: string;
   last_name?: string;
   is_phone_verified?: boolean;
+  permissions: AdminPermissions | null;
 }
 
 /**
@@ -92,6 +108,39 @@ export interface LoginResponse {
   access: string;
   refresh: string;
   user: User;
+}
+
+export interface AdminUser {
+  id: number;
+  phone_number: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  role: "ADMIN";
+  is_active: boolean;
+  permissions: AdminPermissions & {
+    created_at?: string;
+    updated_at?: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateAdminUserPayload {
+  phone_number: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  permissions: AdminPermissions;
+}
+
+export interface UpdateAdminUserPayload {
+  first_name?: string;
+  last_name?: string;
+  email?: string | null;
+  is_active?: boolean;
+  permissions?: Partial<AdminPermissions>;
 }
 
 export interface OtpRequestResponse {

@@ -79,10 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data } = await api.post<LoginResponse>("/auth/login/", payload);
         persistTokens(data.access, data.refresh);
-        // Prefer the user object in the response; fall back to /me/.
+        // Seed immediately, then use /me/ as the authoritative permission state.
         if (data.user) {
           setUser(data.user);
-          return data.user;
         }
         return await fetchProfile();
       } catch (error) {
@@ -135,7 +134,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistTokens(data.access, data.refresh);
         if (data.user) {
           setUser(data.user);
-          return data.user;
         }
         return await fetchProfile();
       } catch (error) {
@@ -169,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: decoded.email,
           phone_number: decoded.phone_number,
           role: decoded.role,
+          permissions: null,
         });
       }
 

@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Prefetch
 from rest_framework import serializers
 
 from apps.catalog.models import ProductVariant
@@ -40,9 +40,17 @@ def variant_label(variant: ProductVariant) -> str:
 
 def variant_image_url(variant: ProductVariant, request) -> Optional[str]:
     """نخستین تصویرِ تنوع، در غیر این صورت تصویر اصلی محصول، در غیر این صورت None."""
-    image = variant.images.first() if hasattr(variant, "images") else None
+    variant_images = getattr(variant, "_prefetched_objects_cache", {}).get("images")
+    image = variant_images[0] if variant_images else None
+    if variant_images is None and hasattr(variant, "images"):
+        image = variant.images.first()
     if image is None:
-        image = variant.product.images.first() if variant.product_id else None
+        product_images = getattr(
+            variant.product, "_prefetched_objects_cache", {}
+        ).get("images")
+        image = product_images[0] if product_images else None
+        if product_images is None and variant.product_id:
+            image = variant.product.images.first()
     if image is None or not image.image:
         return None
     url = image.image.url
@@ -314,7 +322,17 @@ class CheckoutSerializer(serializers.Serializer):
         user = self.context["request"].user
         cart = (
             Cart.objects.filter(user=user)
-            .prefetch_related("items__product_variant__product")
+            .prefetch_related(
+                Prefetch(
+                    "items",
+                    queryset=CartItem.objects.select_related(
+                        "product_variant",
+                        "product_variant__product",
+                        "product_variant__color",
+                        "product_variant__size",
+                    ),
+                )
+            )
             .first()
         )
         if cart is None or cart.is_empty:
@@ -348,9 +366,7 @@ class CheckoutSerializer(serializers.Serializer):
         try:
             with transaction.atomic():
                 # ۱) قفل ردیف‌های تنوع برای جلوگیری از فروش بیش از موجودی.
-                cart_items = list(
-                    cart.items.select_related("product_variant__product").all()
-                )
+                cart_items = list(cart._items_for_totals())
                 variant_ids = [ci.product_variant_id for ci in cart_items]
                 locked = {
                     v.id: v

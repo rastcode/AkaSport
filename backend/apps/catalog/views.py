@@ -12,7 +12,9 @@ from __future__ import annotations
 from typing import Type
 
 from django.db.models import (
+    Avg,
     Case,
+    Count,
     Exists,
     F,
     FloatField,
@@ -75,9 +77,9 @@ class IsAdminOrOwner(IsAdmin):
 
 
 # --------------------------------------------------------------------------- #
-# Annotated product queryset (shared by public list/detail)
+# Product querysets
 # --------------------------------------------------------------------------- #
-def annotated_products() -> QuerySet[Product]:
+def product_list_queryset() -> QuerySet[Product]:
     """Product queryset annotated for price range, discount sort and stock."""
     effective = Coalesce("discount_price", "base_price")
     base_f = Cast("base_price", FloatField())
@@ -89,15 +91,7 @@ def annotated_products() -> QuerySet[Product]:
 
     return (
         Product.objects.select_related("category", "brand")
-        .prefetch_related(
-            Prefetch(
-                "variants",
-                queryset=ProductVariant.objects.filter(is_active=True)
-                .select_related("color", "size")
-                .prefetch_related("images"),
-            ),
-            "images",
-        )
+        .prefetch_related("images")
         .annotate(
             eff_price=effective,
             in_stock=Exists(has_stock),
@@ -105,6 +99,37 @@ def annotated_products() -> QuerySet[Product]:
                 When(base_price=0, then=Value(0.0)),
                 default=(base_f - eff_f) / base_f * Value(100.0),
                 output_field=FloatField(),
+            ),
+        )
+    )
+
+
+def product_detail_queryset(*, include_inactive_variants: bool = False) -> QuerySet[Product]:
+    """Product detail queryset with nested relations and review aggregates."""
+    variants = ProductVariant.objects.select_related("color", "size").prefetch_related(
+        "images"
+    )
+    if not include_inactive_variants:
+        variants = variants.filter(is_active=True)
+
+    return (
+        product_list_queryset()
+        .select_related(
+            "category__parent",
+            "category__parent__parent",
+            "category__parent__parent__parent",
+            "category__parent__parent__parent__parent",
+        )
+        .prefetch_related(Prefetch("variants", queryset=variants))
+        .annotate(
+            approved_reviews_count=Count(
+                "reviews",
+                filter=Q(reviews__status=ProductReview.Status.APPROVED),
+                distinct=True,
+            ),
+            approved_average_rating=Avg(
+                "reviews__rating",
+                filter=Q(reviews__status=ProductReview.Status.APPROVED),
             ),
         )
     )
@@ -121,17 +146,29 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = "slug"
 
     def get_queryset(self) -> QuerySet[Category]:
-        return Category.objects.filter(is_active=True).order_by(
-            "display_order", "name_fa"
+        return Category.objects.filter(is_active=True).select_related(
+            "parent",
+            "parent__parent",
+            "parent__parent__parent",
+            "parent__parent__parent__parent",
+        ).order_by(
+            "display_order",
+            "name_fa",
         )
 
     @action(detail=False, methods=["get"])
     def tree(self, request: Request) -> Response:
-        roots = (
-            Category.objects.filter(parent__isnull=True, is_active=True)
-            .order_by("display_order", "name_fa")
-            .prefetch_related("children")
+        categories = list(
+            Category.objects.filter(is_active=True).order_by(
+                "display_order", "name_fa"
+            )
         )
+        children_by_parent: dict[int | None, list[Category]] = {}
+        for category in categories:
+            children_by_parent.setdefault(category.parent_id, []).append(category)
+        for category in categories:
+            category.active_children = children_by_parent.get(category.id, [])
+        roots = children_by_parent.get(None, [])
         data = CategoryTreeSerializer(
             roots, many=True, context=self.get_serializer_context()
         ).data
@@ -185,7 +222,11 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     )
 
     def get_queryset(self) -> QuerySet[Product]:
-        qs = annotated_products()
+        qs = (
+            product_list_queryset()
+            if self.action == "list"
+            else product_detail_queryset()
+        )
         if not self._is_staff():
             qs = qs.filter(status=Product.Status.PUBLISHED)
         return qs.order_by("-created_at")
@@ -244,7 +285,7 @@ class SearchSuggestionsView(APIView):
             return Response({"products": [], "categories": [], "brands": []})
 
         products = (
-            annotated_products()
+            product_list_queryset()
             .filter(status=Product.Status.PUBLISHED)
             .filter(
                 Q(title_fa__icontains=q)
@@ -254,10 +295,16 @@ class SearchSuggestionsView(APIView):
                 | Q(brand__name_en__icontains=q)
                 | Q(category__name_fa__icontains=q)
             )
-            .distinct()[:5]
+            [:5]
         )
         categories = (
             Category.objects.filter(is_active=True)
+            .select_related(
+                "parent",
+                "parent__parent",
+                "parent__parent__parent",
+                "parent__parent__parent__parent",
+            )
             .filter(
                 Q(name_fa__icontains=q) | Q(name_en__icontains=q) | Q(slug__icontains=q)
             )
@@ -268,6 +315,12 @@ class SearchSuggestionsView(APIView):
         )[:5]
 
         ctx = {"request": request}
+        if request.user and request.user.is_authenticated:
+            ctx["wishlisted_ids"] = set(
+                WishlistItem.objects.filter(user=request.user).values_list(
+                    "product_id", flat=True
+                )
+            )
         return Response(
             {
                 "products": ProductListSerializer(products, many=True, context=ctx).data,
@@ -315,10 +368,8 @@ class AdminProductViewSet(viewsets.ModelViewSet):
     lookup_field = "slug"
 
     def get_queryset(self) -> QuerySet[Product]:
-        return (
-            Product.objects.select_related("category", "brand")
-            .prefetch_related("variants__color", "variants__size", "images")
-            .order_by("-created_at")
+        return product_detail_queryset(include_inactive_variants=True).order_by(
+            "-created_at"
         )
 
     def get_serializer_class(self) -> Type[BaseSerializer]:
@@ -447,19 +498,23 @@ class WishlistListView(generics.ListAPIView):
     serializer_class = ProductListSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def _wishlisted_ids(self) -> set[int]:
+        if not hasattr(self, "_cached_wishlisted_ids"):
+            self._cached_wishlisted_ids = set(
+                WishlistItem.objects.filter(user=self.request.user).values_list(
+                    "product_id", flat=True
+                )
+            )
+        return self._cached_wishlisted_ids
+
     def get_queryset(self) -> QuerySet[Product]:
-        ids = WishlistItem.objects.filter(user=self.request.user).values_list(
-            "product_id", flat=True
-        )
-        return annotated_products().filter(id__in=list(ids)).order_by("-created_at")
+        return product_list_queryset().filter(
+            id__in=self._wishlisted_ids()
+        ).order_by("-created_at")
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
-        ctx["wishlisted_ids"] = set(
-            WishlistItem.objects.filter(user=self.request.user).values_list(
-                "product_id", flat=True
-            )
-        )
+        ctx["wishlisted_ids"] = self._wishlisted_ids()
         return ctx
 
 

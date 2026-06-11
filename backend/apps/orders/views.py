@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Prefetch, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -41,6 +42,23 @@ from apps.orders.serializers import (
 )
 
 
+def cart_queryset() -> QuerySet[Cart]:
+    items = CartItem.objects.select_related(
+        "product_variant",
+        "product_variant__product",
+        "product_variant__color",
+        "product_variant__size",
+    ).prefetch_related(
+        "product_variant__images",
+        "product_variant__product__images",
+    )
+    return Cart.objects.prefetch_related(Prefetch("items", queryset=items))
+
+
+def order_queryset() -> QuerySet[Order]:
+    return Order.objects.select_related("user", "coupon").prefetch_related("items")
+
+
 # --------------------------------------------------------------------------- #
 # Cart
 # --------------------------------------------------------------------------- #
@@ -49,8 +67,10 @@ class CartView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_cart(self, request: Request) -> Cart:
+    def _get_cart(self, request: Request, *, with_items: bool = True) -> Cart:
         cart, _created = Cart.objects.get_or_create(user=request.user)
+        if with_items:
+            return cart_queryset().get(pk=cart.pk)
         return cart
 
     def get(self, request: Request) -> Response:
@@ -63,7 +83,7 @@ class CartView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        cart = self._get_cart(request)
+        cart = self._get_cart(request, with_items=False)
         variant = data["product_variant"]
         quantity = data["quantity"]
         mode = data["mode"]
@@ -93,13 +113,15 @@ class CartView(APIView):
             item.save()
 
         return Response(
-            CartSerializer(cart, context={"request": request}).data,
+            CartSerializer(
+                cart_queryset().get(pk=cart.pk), context={"request": request}
+            ).data,
             status=status.HTTP_200_OK,
         )
 
     def delete(self, request: Request) -> Response:
         """خالی کردن کامل سبد."""
-        cart = self._get_cart(request)
+        cart = self._get_cart(request, with_items=False)
         cart.clear()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -136,16 +158,20 @@ class CartItemDetailView(APIView):
         item.quantity = quantity
         item.save(update_fields=["quantity", "updated_at"])
         return Response(
-            CartSerializer(item.cart, context={"request": request}).data,
+            CartSerializer(
+                cart_queryset().get(pk=item.cart_id), context={"request": request}
+            ).data,
             status=status.HTTP_200_OK,
         )
 
     def delete(self, request: Request, item_id: int) -> Response:
         item = self._get_item(request, item_id)
-        cart = item.cart
+        cart_id = item.cart_id
         item.delete()
         return Response(
-            CartSerializer(cart, context={"request": request}).data,
+            CartSerializer(
+                cart_queryset().get(pk=cart_id), context={"request": request}
+            ).data,
             status=status.HTTP_200_OK,
         )
 
@@ -230,6 +256,7 @@ class CheckoutView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
+        order = order_queryset().get(pk=order.pk)
         return Response(
             OrderSerializer(order, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
@@ -252,7 +279,7 @@ class OrderHistoryView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Order.objects.prefetch_related("items").select_related("coupon")
+        qs = order_queryset()
         if not getattr(user, "is_admin", False):
             qs = qs.filter(user=user)
         status_param = self.request.query_params.get("status")
@@ -268,7 +295,7 @@ class OrderDetailView(APIView):
 
     def _get_order(self, request: Request, order_id: int) -> Order:
         order = get_object_or_404(
-            Order.objects.prefetch_related("items"), id=order_id
+            order_queryset(), id=order_id
         )
         if not getattr(request.user, "is_admin", False) and order.user_id != request.user.id:
             # وجود سفارش را از کاربر غیرمالک پنهان می‌کنیم.
@@ -299,7 +326,7 @@ class OrderStatusUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
     def patch(self, request: Request, order_id: int) -> Response:
-        order = get_object_or_404(Order, id=order_id)
+        order = get_object_or_404(order_queryset(), id=order_id)
 
         serializer = OrderStatusUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

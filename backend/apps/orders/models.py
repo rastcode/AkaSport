@@ -73,21 +73,30 @@ class Cart(TimeStampedModel):
             "product_variant__size",
         )
 
+    def _items_for_totals(self):
+        cache = getattr(self, "_prefetched_objects_cache", {})
+        if "items" in cache:
+            return cache["items"]
+        return self.items_queryset
+
     @property
     def total_quantity(self) -> int:
-        return sum(item.quantity for item in self.items.all())
+        return sum(item.quantity for item in self._items_for_totals())
 
     @property
     def subtotal(self) -> Decimal:
         """Sum of line totals at current prices (pre-discount, pre-shipping)."""
         total = sum(
-            (item.line_total for item in self.items_queryset), Decimal("0.00")
+            (item.line_total for item in self._items_for_totals()), Decimal("0.00")
         )
         return Decimal(total).quantize(TWO_PLACES)
 
     @property
     def is_empty(self) -> bool:
-        return not self.items.exists()
+        items = self._items_for_totals()
+        if isinstance(items, list):
+            return not items
+        return not items.exists()
 
     def clear(self) -> None:
         """Remove all items (used after a successful checkout)."""

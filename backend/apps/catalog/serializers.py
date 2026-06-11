@@ -78,9 +78,11 @@ class CategoryTreeSerializer(serializers.ModelSerializer):
         fields = ("id", "name_fa", "name_en", "slug", "icon", "children")
 
     def get_children(self, obj: Category) -> list[dict[str, Any]]:
-        children = obj.children.filter(is_active=True).order_by(
-            "display_order", "name_fa"
-        )
+        children = getattr(obj, "active_children", None)
+        if children is None:
+            children = obj.children.filter(is_active=True).order_by(
+                "display_order", "name_fa"
+            )
         return CategoryTreeSerializer(children, many=True, context=self.context).data
 
 
@@ -344,9 +346,15 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return obj.category.get_effective_schema() if obj.category_id else {}
 
     def get_reviews_count(self, obj: Product) -> int:
+        annotated = getattr(obj, "approved_reviews_count", None)
+        if annotated is not None:
+            return annotated
         return obj.reviews.filter(status=ProductReview.Status.APPROVED).count()
 
     def get_average_rating(self, obj: Product) -> Optional[float]:
+        annotated = getattr(obj, "approved_average_rating", None)
+        if annotated is not None:
+            return round(annotated, 1)
         agg = obj.reviews.filter(
             status=ProductReview.Status.APPROVED
         ).aggregate(avg=Avg("rating"))

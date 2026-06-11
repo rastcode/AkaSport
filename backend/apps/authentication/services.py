@@ -18,12 +18,14 @@ from __future__ import annotations
 import abc
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, ClassVar, Optional, Type
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.authentication.exceptions import (
@@ -187,22 +189,29 @@ class OTPAuthService(BaseAuthService):
         if not phone_number:
             raise InvalidCredentials("A phone number is required.")
 
-        user = self._get_user_by_phone(phone_number)
-        self._ensure_active(user)
+        expires_at = timezone.now() + timedelta(
+            minutes=settings.OTP_EXPIRY_MINUTES
+        )
+        user = User.objects.filter(
+            phone_number=phone_number, is_active=True
+        ).first()
 
-        with transaction.atomic():
-            otp = OTPVerification.issue(
-                user=user, purpose=OTPVerification.Purpose.LOGIN
-            )
-        self._send_sms(phone_number, otp.plain_code)
+        otp = None
+        if user is not None:
+            with transaction.atomic():
+                otp = OTPVerification.issue(
+                    user=user, purpose=OTPVerification.Purpose.LOGIN
+                )
+            expires_at = otp.expires_at
+            self._send_sms(phone_number, otp.plain_code)
 
         result: dict[str, Any] = {
-            "detail": "کد تأیید ارسال شد.",
+            "detail": "اگر این شماره در سیستم موجود باشد، کد تأیید ارسال خواهد شد.",
             "phone_number": phone_number,
-            "expires_at": otp.expires_at,
+            "expires_at": expires_at,
         }
         # Local convenience only; production responses never expose the OTP.
-        if settings.DEBUG:
+        if settings.DEBUG and otp is not None:
             result["debug_code"] = otp.plain_code
         return result
 
@@ -214,8 +223,11 @@ class OTPAuthService(BaseAuthService):
         if not phone_number or not code:
             raise InvalidCredentials("Phone number and OTP code are required.")
 
-        user = self._get_user_by_phone(phone_number)
-        self._ensure_active(user)
+        user = User.objects.filter(
+            phone_number=phone_number, is_active=True
+        ).first()
+        if user is None:
+            raise OTPExpiredOrInvalid()
 
         # Fetch the most recent unused login OTP.
         otp: Optional[OTPVerification] = (

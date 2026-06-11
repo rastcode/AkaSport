@@ -286,6 +286,18 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": os.environ.get("AUTH_LOGIN_THROTTLE_RATE", "5/min"),
+        "auth_otp_request": os.environ.get(
+            "AUTH_OTP_REQUEST_THROTTLE_RATE", "3/min"
+        ),
+        "auth_otp_verify": os.environ.get(
+            "AUTH_OTP_VERIFY_THROTTLE_RATE", "5/min"
+        ),
+    },
     # در production فقط JSON؛ مرورگرِ DRF فقط در DEBUG فعال است.
     "DEFAULT_RENDERER_CLASSES": (
         ("rest_framework.renderers.JSONRenderer",)

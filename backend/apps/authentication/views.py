@@ -13,9 +13,11 @@ from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.authentication.exceptions import PersianThrottled
 from apps.authentication.serializers import (
     LoginSerializer,
     OTPRequestSerializer,
@@ -24,6 +26,15 @@ from apps.authentication.serializers import (
     UserSerializer,
 )
 from apps.authentication.services import AuthServiceFactory, OTPAuthService
+
+
+class AuthThrottleMixin:
+    """Scoped auth throttling with a user-facing Persian 429 response."""
+
+    throttle_classes = [ScopedRateThrottle]
+
+    def throttled(self, request: Request, wait: float) -> None:
+        raise PersianThrottled(wait=wait)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -45,7 +56,7 @@ class RegisterView(generics.CreateAPIView):
         )
 
 
-class LoginView(APIView):
+class LoginView(AuthThrottleMixin, APIView):
     """
     `POST /api/auth/login/` — unified login dispatched by the Factory.
 
@@ -54,6 +65,7 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
+    throttle_scope = "auth_login"
 
     def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)
@@ -66,10 +78,11 @@ class LoginView(APIView):
         return Response(token_pair.as_dict(), status=status.HTTP_200_OK)
 
 
-class OTPRequestView(APIView):
+class OTPRequestView(AuthThrottleMixin, APIView):
     """`POST /api/auth/otp/request/` — issue and 'send' a new OTP."""
 
     permission_classes = [AllowAny]
+    throttle_scope = "auth_otp_request"
 
     def post(self, request: Request) -> Response:
         serializer = OTPRequestSerializer(data=request.data)
@@ -80,10 +93,11 @@ class OTPRequestView(APIView):
         return Response(result, status=status.HTTP_200_OK)
 
 
-class OTPVerifyView(APIView):
+class OTPVerifyView(AuthThrottleMixin, APIView):
     """`POST /api/auth/otp/verify/` — verify an OTP and return JWT tokens."""
 
     permission_classes = [AllowAny]
+    throttle_scope = "auth_otp_verify"
 
     def post(self, request: Request) -> Response:
         serializer = OTPVerifySerializer(data=request.data)

@@ -8,7 +8,7 @@ responses with appropriate HTTP status codes by the default exception handler.
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, Throttled
 
 
 class InvalidCredentials(APIException):
@@ -39,6 +39,12 @@ class OTPTooManyAttempts(APIException):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     default_detail = "Too many incorrect OTP attempts. Request a new code."
     default_code = "otp_too_many_attempts"
+
+
+class PersianThrottled(Throttled):
+    default_detail = "درخواست‌های زیادی ارسال شده است. لطفاً کمی بعد دوباره تلاش کنید."
+    extra_detail_singular = "امکان تلاش مجدد در {wait} ثانیه."
+    extra_detail_plural = "امکان تلاش مجدد در {wait} ثانیه."
 
 
 class UserNotFound(APIException):

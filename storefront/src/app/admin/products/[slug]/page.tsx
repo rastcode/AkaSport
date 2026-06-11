@@ -35,7 +35,15 @@ function EditInner({ slug }: { slug: string }) {
   const { role, isLoading: authLoading } = useAuth();
   const isStaff = role === "OWNER" || role === "ADMIN";
   const router = useRouter();
-  const justCreated = useSearchParams().get("created") === "1";
+  const createdFlag = useSearchParams().get("created");
+  const createdMessage =
+    createdFlag === "2"
+      ? "محصول و تصویر اصلی با موفقیت ثبت شدند."
+      : createdFlag === "3"
+        ? "محصول ساخته شد، اما آپلود تصویر ناموفق بود. می‌توانید بعداً تصویر را اضافه کنید."
+        : createdFlag === "1"
+          ? "محصول با موفقیت ساخته شد."
+          : null;
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [lookups, setLookups] = useState<CatalogLookups | null>(null);
@@ -43,7 +51,7 @@ function EditInner({ slug }: { slug: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(justCreated ? "محصول با موفقیت ساخته شد." : null);
+  const [saveMsg, setSaveMsg] = useState<string | null>(createdMessage);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [deleting, setDeleting] = useState(false);

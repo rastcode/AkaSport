@@ -26,12 +26,15 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from decimal import Decimal, InvalidOperation
+
 from apps.authentication.permissions import IsAdmin
-from apps.orders.models import Cart, CartItem, Order
+from apps.orders.models import Cart, CartItem, Coupon, Order
 from apps.orders.serializers import (
     AddCartItemSerializer,
     CartSerializer,
     CheckoutSerializer,
+    CouponSerializer,
     OrderSerializer,
     OrderStatusUpdateSerializer,
     UpdateCartItemSerializer,
@@ -145,6 +148,72 @@ class CartItemDetailView(APIView):
             CartSerializer(cart, context={"request": request}).data,
             status=status.HTTP_200_OK,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Coupons
+# --------------------------------------------------------------------------- #
+class CouponValidateView(APIView):
+    """
+    POST coupons/validate/  body: {"code": "...", "subtotal": "..."}
+
+    کد را اعتبارسنجی و مبلغ تخفیف را برمی‌گرداند. اعتبارسنجی نهایی هنگام تسویه‌حساب
+    دوباره با subtotalِ واقعیِ سبد انجام می‌شود (ضدِ دستکاری سمت‌کاربر).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        code = (request.data.get("code") or "").strip().upper()
+        if not code:
+            return Response(
+                {"detail": "کد تخفیف را وارد کنید."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            subtotal = Decimal(str(request.data.get("subtotal") or "0"))
+        except (InvalidOperation, TypeError):
+            subtotal = Decimal("0")
+
+        coupon = Coupon.objects.filter(code=code).first()
+        if coupon is None:
+            return Response(
+                {"detail": "کد تخفیف معتبر نیست."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = coupon.validation_error(subtotal=subtotal)
+        if reason:
+            return Response({"detail": reason}, status=status.HTTP_400_BAD_REQUEST)
+
+        discount = coupon.compute_discount(subtotal)
+        return Response(
+            {
+                "code": coupon.code,
+                "discount_type": coupon.discount_type,
+                "value": str(coupon.value),
+                "discount_amount": str(discount),
+                "message": "کد تخفیف اعمال شد.",
+            }
+        )
+
+
+class AdminCouponViewSet(viewsets.ModelViewSet):
+    """مدیریت کدهای تخفیف (فقط ADMIN/OWNER)."""
+
+    serializer_class = CouponSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+        qs = Coupon.objects.all().order_by("-created_at")
+        status_param = self.request.query_params.get("status")
+        now = timezone.now()
+        if status_param == "active":
+            qs = qs.filter(active=True)
+        elif status_param == "inactive":
+            qs = qs.filter(active=False)
+        elif status_param == "expired":
+            qs = qs.filter(valid_to__isnull=False, valid_to__lt=now)
+        return qs
 
 
 # --------------------------------------------------------------------------- #

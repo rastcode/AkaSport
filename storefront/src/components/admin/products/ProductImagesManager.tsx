@@ -33,6 +33,21 @@ function variantLabel(v: ProductVariant): string {
   return parts.length ? parts.join(" - ") : v.sku;
 }
 
+/** فرمت‌های مجاز تصویر. */
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // ۵ مگابایت
+
+/** اعتبارسنجی سمت‌کاربر فایل تصویر؛ در صورت خطا پیام فارسی برمی‌گرداند. */
+function validateImageFile(f: File): string | null {
+  if (!f.type.startsWith("image/") || !ACCEPTED_TYPES.includes(f.type)) {
+    return "فرمت تصویر معتبر نیست. لطفاً فایل JPG، PNG یا WebP انتخاب کنید.";
+  }
+  if (f.size > MAX_SIZE_BYTES) {
+    return "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.";
+  }
+  return null;
+}
+
 export function ProductImagesManager({ product, onChanged }: Props) {
   const variants = product.variants;
 
@@ -51,8 +66,19 @@ export function ProductImagesManager({ product, onChanged }: Props) {
   function onPickFile(f: File | null) {
     setSuccess(null);
     setError(null);
-    setFile(f);
     if (preview) URL.revokeObjectURL(preview);
+
+    if (f) {
+      const problem = validateImageFile(f);
+      if (problem) {
+        setError(problem);
+        setFile(null);
+        setPreview(null);
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+    }
+    setFile(f);
     setPreview(f ? URL.createObjectURL(f) : null);
   }
 
@@ -73,6 +99,12 @@ export function ProductImagesManager({ product, onChanged }: Props) {
       setError("لطفاً ابتدا یک فایل تصویر انتخاب کنید.");
       return;
     }
+    const problem = validateImageFile(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
     const form = new FormData();
     form.append("product", String(product.id));
     form.append("image", file);
@@ -87,7 +119,16 @@ export function ProductImagesManager({ product, onChanged }: Props) {
       setSuccess("تصویر با موفقیت آپلود شد.");
       onChanged();
     } catch (err) {
-      setError((err as ApiError)?.message ?? "آپلود تصویر ناموفق بود. دوباره تلاش کنید.");
+      const apiErr = err as ApiError;
+      // نمایش دقیق خطای فیلدیِ بک‌اند (image / variant / product) اگر موجود بود.
+      const fieldMsg =
+        apiErr?.fieldErrors?.image?.[0] ??
+        apiErr?.fieldErrors?.variant?.[0] ??
+        apiErr?.fieldErrors?.product?.[0] ??
+        apiErr?.fieldErrors?.non_field_errors?.[0];
+      setError(
+        fieldMsg ?? apiErr?.message ?? "آپلود تصویر ناموفق بود. دوباره تلاش کنید.",
+      );
     } finally {
       setUploading(false);
     }
@@ -127,9 +168,9 @@ export function ProductImagesManager({ product, onChanged }: Props) {
             const variant = variants.find((v) => v.id === img.variant);
             return (
               <div key={img.id} className="overflow-hidden rounded-xl border border-silver/60 bg-white">
-                <div className="relative aspect-square w-full bg-brand-light">
+                <div className="relative aspect-square w-full bg-white">
                   {url ? (
-                    <Image src={url} alt={img.alt_text_fa || product.title_fa} fill sizes="160px" className="object-cover" />
+                    <Image src={url} alt={img.alt_text_fa || product.title_fa} fill sizes="160px" className="object-contain p-2" />
                   ) : (
                     <ProductImagePlaceholder size="thumbnail" />
                   )}
@@ -179,7 +220,7 @@ export function ProductImagesManager({ product, onChanged }: Props) {
               id="img-file"
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
               className="block w-full text-sm text-iron-grey file:ml-3 file:rounded-lg file:border-0 file:bg-brand-dark file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-brand-dark/90"
             />
@@ -227,9 +268,9 @@ export function ProductImagesManager({ product, onChanged }: Props) {
 
         {preview && (
           <div className="mt-3 flex items-center gap-3">
-            <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-silver/60">
+            <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-silver/60 bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview} alt="پیش‌نمایش تصویر" className="h-full w-full object-cover" />
+              <img src={preview} alt="پیش‌نمایش تصویر" className="h-full w-full object-contain p-1" />
             </div>
             <span className="text-xs text-blue-slate">پیش‌نمایش تصویر انتخاب‌شده</span>
           </div>

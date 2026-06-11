@@ -16,6 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   createAdminProduct,
   getCatalogLookups,
+  uploadProductImage,
   type CatalogLookups,
 } from "@/services/adminCatalogService";
 import type { ApiError } from "@/types/auth";
@@ -38,12 +39,33 @@ export default function NewProductPage() {
       .catch(() => setError("خطا در دریافت دسته‌بندی‌ها و برندها."));
   }, [authLoading, isStaff]);
 
-  async function handleSubmit(payload: AdminProductWritePayload) {
+  async function handleSubmit(
+    payload: AdminProductWritePayload,
+    imageFile?: File | null,
+  ) {
     setSubmitting(true);
     setError(null);
     setFieldErrors({});
     try {
       const created = await createAdminProduct(payload);
+
+      // اگر تصویر اصلی انتخاب شده بود، با id محصولِ ساخته‌شده آپلودش کن.
+      if (imageFile) {
+        try {
+          const form = new FormData();
+          form.append("product", String(created.id));
+          form.append("image", imageFile);
+          form.append("is_primary", "true");
+          await uploadProductImage(form);
+          router.replace(`/admin/products/${encodeURIComponent(created.slug)}?created=2`);
+          return;
+        } catch {
+          // محصول ساخته شد ولی تصویر آپلود نشد؛ کاربر بعداً اضافه می‌کند.
+          router.replace(`/admin/products/${encodeURIComponent(created.slug)}?created=3`);
+          return;
+        }
+      }
+
       router.replace(`/admin/products/${encodeURIComponent(created.slug)}?created=1`);
     } catch (err) {
       const apiErr = err as ApiError;
@@ -82,6 +104,7 @@ export default function NewProductPage() {
             submitting={submitting}
             submitLabel="ساخت محصول"
             fieldErrors={fieldErrors}
+            showImageUpload
             onSubmit={handleSubmit}
           />
         )}

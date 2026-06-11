@@ -9,11 +9,16 @@ export function OrderSummary({
   items,
   subtotal,
   totalQuantity,
+  discount = 0,
+  couponCode = null,
 }: {
   items: ServerCartItem[];
   subtotal: number;
   totalQuantity: number;
+  discount?: number;
+  couponCode?: string | null;
 }) {
+  const payable = Math.max(0, subtotal - discount);
   return (
     <div dir="rtl" className="rounded-2xl border border-silver/60 bg-brand-light/70 p-5 lg:sticky lg:top-24">
       <h2 className="mb-4 text-lg font-bold text-iron-grey">خلاصه‌ی سفارش</h2>
@@ -41,10 +46,24 @@ export function OrderSummary({
           <dt className="text-blue-slate">جمع کالاها</dt>
           <dd className="font-semibold text-iron-grey">{formatToman(subtotal)}</dd>
         </div>
+        {discount > 0 && (
+          <div className="flex items-center justify-between">
+            <dt className="text-blue-slate">
+              تخفیف{couponCode ? ` (${couponCode})` : ""}
+            </dt>
+            <dd className="font-semibold text-green-600">− {formatToman(discount)}</dd>
+          </div>
+        )}
+        {discount > 0 && (
+          <div className="flex items-center justify-between border-t border-silver/70 pt-3">
+            <dt className="font-bold text-iron-grey">جمع پس از تخفیف</dt>
+            <dd className="text-base font-extrabold text-blue-slate">{formatToman(payable)}</dd>
+          </div>
+        )}
       </dl>
 
       <p className="mt-3 text-xs text-silver">
-        هزینه‌ی ارسال و تخفیف نهایی پس از ثبت سفارش محاسبه می‌شود.
+        هزینه‌ی ارسال در مرحله‌ی نهایی محاسبه و به مبلغ افزوده می‌شود.
       </p>
     </div>
   );

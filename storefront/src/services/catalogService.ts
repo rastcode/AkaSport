@@ -40,10 +40,16 @@ async function fetchJson<T>(
   path: string,
   init?: RequestInit & { revalidate?: number },
 ): Promise<T> {
-  const { revalidate, ...rest } = init ?? {};
+  const { revalidate, cache, ...rest } = init ?? {};
+  // `cache` و `next.revalidate` با هم تناقض دارند؛ اگر caller صراحتاً cache
+  // (مثلاً "no-store") داده بود، فقط همان را اعمال می‌کنیم؛ در غیر این صورت از
+  // بازاعتبارسنجی زمان‌دار استفاده می‌کنیم.
+  const cacheOpts: RequestInit = cache
+    ? { cache }
+    : { next: { revalidate: revalidate ?? 300 } };
   const res = await fetch(`${CATALOG_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
-    next: revalidate !== undefined ? { revalidate } : { revalidate: 300 },
+    ...cacheOpts,
     ...rest,
   });
   if (!res.ok) {
@@ -135,12 +141,12 @@ export async function getProducts(
  */
 export async function getProductBySlug(
   slug: string,
-  opts: { revalidate?: number } = {},
 ): Promise<ProductDetail | null> {
   try {
+    // همیشه تازه؛ تا پس از حذف/آپلود تصویر، نسخه‌ی کش‌شده‌ی قدیمی سرو نشود.
     return await fetchJson<ProductDetail>(
       `/products/${encodeURIComponent(slug)}/`,
-      { revalidate: opts.revalidate ?? 300 },
+      { cache: "no-store" },
     );
   } catch (error) {
     if (error instanceof CatalogServiceError && error.status === 404) {

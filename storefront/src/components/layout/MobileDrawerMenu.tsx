@@ -144,6 +144,7 @@ export function MobileDrawerMenu({ className }: { className?: string }) {
               ) : (
                 <>
                   <DrawerLink href="/orders" onNavigate={close}>سفارش‌های من</DrawerLink>
+                  <DrawerLink href="/profile/wishlist" onNavigate={close}>علاقه‌مندی‌های من</DrawerLink>
                   <DrawerLink href="/cart" onNavigate={close}>سبد خرید</DrawerLink>
                   <DrawerLink href="/products" onNavigate={close}>ادامه‌ی خرید</DrawerLink>
                 </>

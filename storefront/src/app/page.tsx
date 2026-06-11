@@ -18,8 +18,10 @@ import { ProductRail } from "@/components/home/ProductRail";
 import { getCategoryTree, getProducts } from "@/services/catalogService";
 import type { CategoryTreeNode, ProductListItem } from "@/types/catalog";
 
-// بازاعتبارسنجی دوره‌ای محتوای صفحه‌ی اصلی.
-export const revalidate = 120;
+// رندر پویا تا داده‌ی محصولات (و URL تصاویر) همیشه تازه باشد و پس از آپلود
+// تصویر، صفحه‌ی اصلی نسخه‌ی کش‌شده‌ی قدیمی را نشان ندهد.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function results(
   res: { results: ProductListItem[] } | null,

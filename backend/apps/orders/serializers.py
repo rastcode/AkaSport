@@ -174,8 +174,33 @@ class CouponSerializer(serializers.ModelSerializer):
             "valid_to",
             "max_uses",
             "used_count",
+            "min_order_amount",
+            "max_discount_amount",
+            "created_at",
         )
-        read_only_fields = ("id", "used_count")
+        read_only_fields = ("id", "used_count", "created_at")
+        extra_kwargs = {
+            "valid_from": {"required": False},
+            "valid_to": {"required": False, "allow_null": True},
+            "min_order_amount": {"required": False, "allow_null": True},
+            "max_discount_amount": {"required": False, "allow_null": True},
+        }
+
+    def validate_value(self, value):
+        if value is None or value <= 0:
+            raise serializers.ValidationError("مقدار تخفیف باید بزرگ‌تر از صفر باشد.")
+        return value
+
+    def validate(self, attrs):
+        dtype = attrs.get(
+            "discount_type", getattr(self.instance, "discount_type", None)
+        )
+        value = attrs.get("value", getattr(self.instance, "value", None))
+        if dtype == Coupon.DiscountType.PERCENTAGE and value is not None and value > 100:
+            raise serializers.ValidationError(
+                {"value": "درصد تخفیف نمی‌تواند بیشتر از ۱۰۰ باشد."}
+            )
+        return attrs
 
 
 # ======================================================================= #
@@ -302,9 +327,10 @@ class CheckoutSerializer(serializers.Serializer):
             coupon = Coupon.objects.filter(code=code).first()
             if coupon is None:
                 raise serializers.ValidationError(
-                    {"coupon_code": "این کد تخفیف وجود ندارد."}
+                    {"coupon_code": "کد تخفیف معتبر نیست."}
                 )
-            reason = coupon.validation_error()
+            # اعتبارسنجی نهاییِ سمت‌سرور بر اساس subtotalِ واقعیِ سبد.
+            reason = coupon.validation_error(subtotal=cart.subtotal)
             if reason:
                 raise serializers.ValidationError({"coupon_code": reason})
         attrs["coupon"] = coupon
@@ -365,8 +391,11 @@ class CheckoutSerializer(serializers.Serializer):
 
                 # ۳) قیمت‌گذاری ساده و قابل فهم.
                 subtotal = sum((ln["total"] for ln in lines), Decimal("0"))
-                discount = self._coupon_discount(subtotal, coupon)
-                discount = min(discount, subtotal)
+                discount = (
+                    coupon.compute_discount(subtotal)
+                    if coupon is not None
+                    else Decimal("0")
+                )
                 shipping = (
                     Decimal("0")
                     if subtotal >= FREE_SHIPPING_THRESHOLD
@@ -427,14 +456,6 @@ class CheckoutSerializer(serializers.Serializer):
 
         self._order = order
         return order
-
-    @staticmethod
-    def _coupon_discount(subtotal: Decimal, coupon: Optional[Coupon]) -> Decimal:
-        if coupon is None:
-            return Decimal("0")
-        if coupon.discount_type == Coupon.DiscountType.PERCENTAGE:
-            return (subtotal * coupon.value / Decimal("100")).quantize(Decimal("1"))
-        return Decimal(coupon.value)
 
     def to_representation(self, instance: Order) -> dict[str, Any]:
         order = getattr(self, "_order", instance)

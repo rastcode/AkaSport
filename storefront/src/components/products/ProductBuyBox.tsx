@@ -13,6 +13,7 @@ import Link from "next/link";
 
 import { Price } from "@/components/ui/Price";
 import { DiscountBadge } from "@/components/ui/Badge";
+import { WishlistButton } from "@/components/products/WishlistButton";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { formatNumber } from "@/lib/persian";
@@ -64,10 +65,14 @@ export function ProductBuyBox({
       return;
     }
     if (requiresVariant && !selectedVariant) {
-      setNotice({ kind: "info", text: "لطفاً رنگ یا سایز موردنظر را انتخاب کنید." });
+      setNotice({ kind: "info", text: "لطفاً رنگ و سایز را انتخاب کنید." });
       return;
     }
-    if (!selectedVariant || !selectedVariant.is_in_stock) {
+    if (!selectedVariant) {
+      return;
+    }
+    if (!selectedVariant.is_in_stock) {
+      setNotice({ kind: "info", text: "موجودی کافی نیست." });
       return;
     }
 
@@ -167,6 +172,11 @@ export function ProductBuyBox({
       >
         {adding ? "در حال افزودن…" : "افزودن به سبد خرید"}
       </button>
+
+      {/* علاقه‌مندی */}
+      <div className="mt-3">
+        <WishlistButton slug={product.slug} withLabel className="w-full" />
+      </div>
 
       {notice && (
         <div

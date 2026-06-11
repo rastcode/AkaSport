@@ -21,7 +21,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional
 
-from django.core.validators import MinValueValidator
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -396,3 +397,102 @@ class ProductImage(TimeStampedModel):
     def __str__(self) -> str:
         return f"تصویر #{self.pk} برای {self.product_id}"
         # catalog uses apps.core.TimeStampedModel (Phase 1 cleanup)
+
+
+# --------------------------------------------------------------------------- #
+# Product review / rating
+# --------------------------------------------------------------------------- #
+class ProductReview(TimeStampedModel):
+    """نظر و امتیاز کاربر برای یک محصول (با گردش‌کار تأیید مدیر)."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", _("در انتظار تأیید")
+        APPROVED = "APPROVED", _("تأییدشده")
+        REJECTED = "REJECTED", _("ردشده")
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+        verbose_name=_("محصول"),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="product_reviews",
+        verbose_name=_("کاربر"),
+    )
+    rating = models.PositiveSmallIntegerField(
+        _("امتیاز"),
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    title = models.CharField(_("عنوان"), max_length=120, blank=True)
+    comment = models.TextField(_("متن نظر"))
+    status = models.CharField(
+        _("وضعیت"),
+        max_length=10,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    is_verified_purchase = models.BooleanField(_("خریدار تأییدشده"), default=False)
+
+    class Meta:
+        verbose_name = _("نظر محصول")
+        verbose_name_plural = _("نظرات محصول")
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "user"],
+                name="uniq_review_per_user_product",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["product", "status"],
+                name="catalog_review_prod_status_idx",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"نظر {self.user_id} برای {self.product_id} ({self.rating}★)"
+
+
+# --------------------------------------------------------------------------- #
+# Wishlist
+# --------------------------------------------------------------------------- #
+class WishlistItem(TimeStampedModel):
+    """یک محصول در فهرست علاقه‌مندی‌های کاربر."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wishlist_items",
+        verbose_name=_("کاربر"),
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="wishlisted_by",
+        verbose_name=_("محصول"),
+    )
+
+    class Meta:
+        verbose_name = _("علاقه‌مندی")
+        verbose_name_plural = _("علاقه‌مندی‌ها")
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "product"],
+                name="uniq_wishlist_user_product",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "product"],
+                name="catalog_wishlist_user_prod_idx",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"علاقه‌مندی {self.user_id} → {self.product_id}"

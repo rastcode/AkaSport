@@ -94,13 +94,14 @@ export function ProductVariantSelector({ variants, selected, onSelect }: Props) 
                   type="button"
                   onClick={() => chooseColor(color.id)}
                   aria-pressed={isSel}
+                  disabled={!avail}
                   className={cn(
                     "flex min-h-[2.5rem] items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
                     isSel
                       ? "border-brand-accent bg-brand-accent text-white"
                       : avail
                         ? "border-silver bg-white text-blue-slate hover:border-brand-accent"
-                        : "border-silver/50 bg-brand-light text-brand-muted",
+                        : "cursor-not-allowed border-silver/50 bg-brand-light text-brand-muted opacity-60",
                   )}
                 >
                   <span
@@ -129,13 +130,14 @@ export function ProductVariantSelector({ variants, selected, onSelect }: Props) 
                   type="button"
                   onClick={() => chooseSize(size.id)}
                   aria-pressed={isSel}
+                  disabled={!avail}
                   className={cn(
                     "min-h-[2.5rem] min-w-[2.75rem] rounded-xl border px-3 py-2 text-sm font-semibold transition-colors",
                     isSel
                       ? "border-brand-accent bg-brand-accent text-white"
                       : avail
                         ? "border-silver bg-white text-blue-slate hover:border-brand-accent"
-                        : "border-silver/50 bg-brand-light text-brand-muted",
+                        : "cursor-not-allowed border-silver/50 bg-brand-light text-brand-muted opacity-60",
                   )}
                 >
                   {size.name_fa}
@@ -148,7 +150,7 @@ export function ProductVariantSelector({ variants, selected, onSelect }: Props) 
 
       {showUnavailable && (
         <p className="inline-flex rounded-lg bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700">
-          این تنوع فعلاً ناموجود است.
+          این ترکیب رنگ و سایز موجود نیست.
         </p>
       )}
     </div>

@@ -7,10 +7,20 @@
  * در این فرم نیستند و جداگانه در صفحه‌ی ویرایش مدیریت می‌شوند.
  */
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 
 import type { Brand, Category, ProductDetail, ProductStatus } from "@/types/catalog";
 import type { AdminProductWritePayload } from "@/types/adminCatalog";
+
+const ACCEPTED_IMAGE = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGE = 5 * 1024 * 1024;
+
+function validateImageFile(f: File): string | null {
+  if (!f.type.startsWith("image/") || !ACCEPTED_IMAGE.includes(f.type))
+    return "فرمت تصویر معتبر نیست. لطفاً JPG، PNG یا WebP انتخاب کنید.";
+  if (f.size > MAX_IMAGE) return "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.";
+  return null;
+}
 
 const STATUS_OPTIONS: { value: ProductStatus; label: string }[] = [
   { value: "DRAFT", label: "پیش‌نویس" },
@@ -39,7 +49,9 @@ export interface ProductFormProps {
   submitting: boolean;
   submitLabel: string;
   fieldErrors?: Record<string, string[]>;
-  onSubmit: (payload: AdminProductWritePayload) => void;
+  /** نمایش بخش «تصویر اصلی محصول» (فقط در فرم ساخت). */
+  showImageUpload?: boolean;
+  onSubmit: (payload: AdminProductWritePayload, imageFile?: File | null) => void;
 }
 
 export function ProductForm({
@@ -49,6 +61,7 @@ export function ProductForm({
   submitting,
   submitLabel,
   fieldErrors,
+  showImageUpload = false,
   onSubmit,
 }: ProductFormProps) {
   const [titleFa, setTitleFa] = useState(initial?.title_fa ?? "");
@@ -77,6 +90,28 @@ export function ProductForm({
   );
 
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // تصویر اصلی (فقط در فرم ساخت).
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
+
+  function pickImage(f: File | null) {
+    setLocalError(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    if (f) {
+      const problem = validateImageFile(f);
+      if (problem) {
+        setLocalError(problem);
+        setImageFile(null);
+        setImagePreview(null);
+        if (imageRef.current) imageRef.current.value = "";
+        return;
+      }
+    }
+    setImageFile(f);
+    setImagePreview(f ? URL.createObjectURL(f) : null);
+  }
 
   const categoryOptions = useMemo(
     () =>
@@ -149,7 +184,7 @@ export function ProductForm({
       seo_description: seoDesc.trim() || undefined,
       is_featured: isFeatured,
     };
-    onSubmit(payload);
+    onSubmit(payload, showImageUpload ? imageFile : null);
   }
 
   const err = (name: string) => fieldErrors?.[name];
@@ -258,6 +293,33 @@ export function ProductForm({
           <TextField label="توضیحات سئو" value={seoDesc} onChange={setSeoDesc} errors={err("seo_description")} />
         </div>
       </section>
+
+      {/* تصویر اصلی محصول (فقط هنگام ساخت) */}
+      {showImageUpload && (
+        <section className="rounded-xl border border-silver bg-white p-5">
+          <h2 className="mb-1 text-lg font-bold text-iron-grey">تصویر اصلی محصول</h2>
+          <p className="mb-3 text-xs text-blue-slate">
+            یک تصویر برای محصول انتخاب کنید (JPG، PNG یا WebP — حداکثر ۵ مگابایت). این
+            تصویر به‌عنوان تصویر اصلی ثبت می‌شود.
+          </p>
+          <input
+            ref={imageRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-iron-grey file:ml-3 file:rounded-lg file:border-0 file:bg-brand-dark file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-brand-dark/90"
+          />
+          {imagePreview && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="relative h-20 w-20 overflow-hidden rounded-lg border border-silver/60 bg-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview} alt="پیش‌نمایش تصویر" className="h-full w-full object-contain p-1" />
+              </div>
+              <span className="text-xs text-blue-slate">پیش‌نمایش تصویر انتخاب‌شده</span>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="flex justify-end gap-3">
         <button type="submit" disabled={submitting} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">

@@ -12,9 +12,11 @@ import { notFound } from "next/navigation";
 
 import { ProductInteractive } from "@/components/products/ProductInteractive";
 import { ProductSpecifications } from "@/components/products/ProductSpecifications";
+import { ProductReviews } from "@/components/products/ProductReviews";
 import { getProductBySlug, resolveMediaUrl } from "@/services/catalogService";
 
 export const dynamic = "force-dynamic"; // موجودی و بازدید لحظه‌ای
+export const revalidate = 0; // بدون کش؛ تصاویر/داده همیشه تازه
 
 interface PageProps {
   params: { slug: string };
@@ -142,6 +144,13 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </p>
         )}
       </section>
+
+      {/* نظرات کاربران */}
+      <ProductReviews
+        slug={product.slug}
+        averageRating={product.average_rating}
+        reviewsCount={product.reviews_count}
+      />
     </main>
   );
 }

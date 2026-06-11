@@ -37,13 +37,13 @@ export function CategoryShortcutGrid({
                          hover:border-brand-accent/40 hover:shadow-card"
             >
               {iconUrl ? (
-                <span className="relative h-12 w-12 overflow-hidden rounded-2xl">
+                <span className="relative h-12 w-12 overflow-hidden rounded-2xl bg-white">
                   <Image
                     src={iconUrl}
                     alt={category.name_fa}
                     fill
                     sizes="48px"
-                    className="object-cover"
+                    className="object-contain p-1"
                   />
                 </span>
               ) : (

@@ -3,6 +3,7 @@ import { Vazirmatn } from "next/font/google";
 
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { WishlistProvider } from "@/context/WishlistContext";
 import { SiteChrome } from "@/components/layout/SiteChrome";
 
 import "./globals.css";
@@ -30,7 +31,9 @@ export default function RootLayout({
       <body className="min-h-screen bg-white font-sans text-iron-grey antialiased">
         <AuthProvider>
           <CartProvider>
-            <SiteChrome>{children}</SiteChrome>
+            <WishlistProvider>
+              <SiteChrome>{children}</SiteChrome>
+            </WishlistProvider>
           </CartProvider>
         </AuthProvider>
       </body>

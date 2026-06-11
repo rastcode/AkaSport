@@ -175,13 +175,30 @@ class Coupon(TimeStampedModel):
     )
     active = models.BooleanField(_("active"), default=True)
     valid_from = models.DateTimeField(_("valid from"), default=timezone.now)
-    valid_to = models.DateTimeField(_("valid to"))
+    valid_to = models.DateTimeField(_("valid to"), null=True, blank=True)
     max_uses = models.PositiveIntegerField(
         _("max uses"),
         default=0,
         help_text=_("Maximum total redemptions. 0 means unlimited."),
     )
     used_count = models.PositiveIntegerField(_("used count"), default=0)
+    min_order_amount = models.DecimalField(
+        _("حداقل مبلغ سفارش"),
+        max_digits=12,
+        decimal_places=0,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    max_discount_amount = models.DecimalField(
+        _("سقف مبلغ تخفیف"),
+        max_digits=12,
+        decimal_places=0,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text=_("فقط برای تخفیف درصدی."),
+    )
 
     class Meta:
         verbose_name = _("coupon")
@@ -218,25 +235,44 @@ class Coupon(TimeStampedModel):
 
     def is_valid(self, *, at: timezone.datetime | None = None) -> bool:
         """True if the coupon is active, in its window and not exhausted."""
-        now = at or timezone.now()
-        return (
-            self.active
-            and self.valid_from <= now <= self.valid_to
-            and self.has_uses_left
-        )
+        return self.validation_error(at=at) is None
 
-    def validation_error(self, *, at: timezone.datetime | None = None) -> str | None:
-        """Return a human-readable reason the coupon is invalid, else None."""
+    def validation_error(
+        self,
+        *,
+        at: timezone.datetime | None = None,
+        subtotal: Decimal | None = None,
+    ) -> str | None:
+        """دلیلِ نامعتبر بودن کوپن را به فارسی برمی‌گرداند، در غیر این صورت None.
+
+        اگر `subtotal` داده شود، شرط حداقل مبلغ سفارش هم بررسی می‌شود.
+        """
         now = at or timezone.now()
         if not self.active:
-            return "این کد تخفیف فعال نیست."
-        if now < self.valid_from:
+            return "این کد تخفیف غیرفعال است."
+        if self.valid_from and now < self.valid_from:
             return "این کد تخفیف هنوز معتبر نشده است."
-        if now > self.valid_to:
-            return "این کد تخفیف منقضی شده است."
+        if self.valid_to and now > self.valid_to:
+            return "مهلت استفاده از این کد تخفیف تمام شده است."
         if not self.has_uses_left:
-            return "ظرفیت استفاده از این کد تخفیف به پایان رسیده است."
+            return "ظرفیت استفاده از این کد تخفیف تکمیل شده است."
+        if (
+            subtotal is not None
+            and self.min_order_amount
+            and subtotal < self.min_order_amount
+        ):
+            return "حداقل مبلغ سفارش برای این کد رعایت نشده است."
         return None
+
+    def compute_discount(self, subtotal: Decimal) -> Decimal:
+        """مبلغ تخفیف برای یک subtotal مشخص (با رعایت سقف و عدم منفی شدن)."""
+        if self.discount_type == self.DiscountType.PERCENTAGE:
+            discount = (subtotal * self.value / Decimal("100")).quantize(Decimal("1"))
+            if self.max_discount_amount:
+                discount = min(discount, self.max_discount_amount)
+        else:
+            discount = Decimal(self.value)
+        return min(discount, subtotal)
 
     def register_use(self) -> None:
         """Atomically increment the redemption counter."""

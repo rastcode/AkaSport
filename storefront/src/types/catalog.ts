@@ -126,6 +126,8 @@ export interface ProductListItem {
   is_featured: boolean;
   view_count: number;
   in_stock: boolean;
+  /** آیا این محصول در علاقه‌مندی‌های کاربرِ درخواست است (در SSR بدون توکن: false). */
+  is_wishlisted?: boolean;
   primary_image: string | null;
 }
 
@@ -153,6 +155,12 @@ export interface ProductDetail {
   sold_count: number;
   is_featured: boolean;
   in_stock: boolean;
+  /** میانگین امتیاز نظرهای تأییدشده (۱ تا ۵) یا null اگر نظری نیست. */
+  average_rating: number | null;
+  /** تعداد نظرهای تأییدشده. */
+  reviews_count: number;
+  /** آیا در علاقه‌مندی‌های کاربرِ درخواست است (در SSR بدون توکن: false). */
+  is_wishlisted?: boolean;
   images: ProductImage[];
   variants: ProductVariant[];
   /** ممکن است در پاسخ نباشد؛ اختیاری برای سازگاری. */

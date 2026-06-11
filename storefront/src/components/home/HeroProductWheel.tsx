@@ -21,7 +21,7 @@ import { formatToman } from "@/lib/persian";
 import type { ProductListItem } from "@/types/catalog";
 
 const ROTATE_MS = 4000;
-const RADIUS = "6.5rem"; // شعاع چیدمان thumbnailها
+const RADIUS = "9.5rem"; // شعاع چیدمان محصولات روی مدار (۱۵۲px)
 
 export function HeroProductWheel({ products }: { products: ProductListItem[] }) {
   const items = useMemo(() => products.slice(0, 6), [products]);
@@ -68,7 +68,7 @@ if (!active) {
   return null;
 }
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center">
       <div
         role="group"
         aria-label="محصولات ویژه"
@@ -76,23 +76,23 @@ if (!active) {
         onMouseLeave={() => setPausedState(false)}
         onFocusCapture={() => setPausedState(true)}
         onBlurCapture={() => setPausedState(false)}
-        className="relative h-60 w-60 origin-center scale-90 sm:scale-100 lg:scale-110"
+        className="relative h-[24rem] w-[24rem] origin-center scale-[0.7] sm:scale-90 lg:scale-100"
       >
         {/* هاله‌ی پس‌زمینه */}
         <div
           aria-hidden
-          className="absolute inset-6 rounded-full bg-gradient-to-tr from-brand-accent/10 via-brand-light to-brand-dark/5"
+          className="absolute inset-8 rounded-full bg-gradient-to-tr from-brand-accent/10 via-brand-light to-brand-dark/5"
         />
         {/* حلقه‌ی راهنما */}
-        <div aria-hidden className="absolute inset-8 rounded-full border border-brand-muted/30" />
+        <div aria-hidden className="absolute inset-10 rounded-full border border-brand-muted/30" />
 
         {/* مرکز: وردمارک */}
         <div
           aria-hidden
-          className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-silver/60 bg-white text-center shadow-sm"
+          className="absolute left-1/2 top-1/2 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-silver/60 bg-white text-center shadow-sm"
         >
-          <span className="text-lg font-black tracking-tight text-brand-dark">آکامارکت</span>
-          <span className="mt-0.5 text-[10px] font-semibold text-brand-muted">ویژه‌ها</span>
+          <span className="text-xl font-black tracking-tight text-brand-dark">آکامارکت</span>
+          <span className="mt-0.5 text-[11px] font-semibold text-brand-muted">ویژه‌ها</span>
         </div>
 
         {/* thumbnailها روی مدار */}
@@ -107,50 +107,65 @@ if (!active) {
               aria-label={`مشاهده محصول ${item.title_fa}`}
               tabIndex={isActive ? 0 : -1}
               style={{
-                transform: `rotate(${angle}deg) translateY(-${RADIUS}) rotate(${-angle}deg) scale(${isActive ? 1.18 : 0.82})`,
+                transform: `rotate(${angle}deg) translateY(-${RADIUS}) rotate(${-angle}deg) scale(${isActive ? 1.4 : 0.9})`,
                 transitionProperty: reduced ? "none" : "transform, opacity",
-                zIndex: isActive ? 20 : 10,
+                zIndex: isActive ? 30 : 10,
               }}
               className={
-                "absolute left-1/2 top-1/2 -ml-9 -mt-9 block h-[4.5rem] w-[4.5rem] overflow-hidden rounded-2xl border bg-white duration-700 ease-out " +
-                (isActive
-                  ? "border-brand-accent opacity-100 shadow-[0_0_0_3px_rgba(239,35,60,0.18)]"
-                  : "border-silver/60 opacity-60")
+                "absolute left-1/2 top-1/2 -ml-14 -mt-14 block h-28 w-28 duration-700 ease-out " +
+                (isActive ? "opacity-100" : "opacity-80 hover:opacity-100")
               }
             >
               {url ? (
+                // تصویر محصول به‌صورت cutout شناور (بدون قاب/کادر)، با drop-shadow
+                // برای حس سه‌بعدی؛ آیتم فعال بزرگ‌تر و با سایه‌ی قوی‌تر.
                 <Image
+                  key={url}
                   src={url}
                   alt={item.title_fa}
                   fill
-                  sizes="72px"
-                  className="object-cover"
+                  sizes="160px"
+                  className={
+                    "object-contain transition-[filter] duration-300 " +
+                    (isActive
+                      ? "drop-shadow-[0_14px_20px_rgba(43,45,66,0.42)]"
+                      : "drop-shadow-[0_8px_12px_rgba(43,45,66,0.24)]")
+                  }
                 />
               ) : (
-                <ProductImagePlaceholder size="thumbnail" />
+                <span
+                  className={
+                    "flex h-full w-full items-center justify-center overflow-hidden rounded-2xl border " +
+                    (isActive ? "border-brand-accent/60" : "border-silver/50")
+                  }
+                >
+                  <ProductImagePlaceholder size="thumbnail" />
+                </span>
               )}
             </Link>
           );
         })}
       </div>
 
-      {/* اطلاعات محصول فعال */}
+      {/* اطلاعات محصول فعال — کارت فشرده و باریک، با فاصله‌ی طبیعی از چرخ */}
       <Link
         href={`/product/${active.slug}`}
-        className="group w-full max-w-xs rounded-2xl border border-silver/60 bg-white/80 p-3 text-center transition-colors hover:border-brand-accent/40"
+        className="group mt-6 flex w-[17rem] max-w-[80vw] items-center gap-3 rounded-xl border border-silver/60 bg-white px-3 py-2 text-right shadow-sm transition-colors hover:border-brand-accent/40 sm:mt-8"
       >
-        <span className="inline-block rounded-full bg-brand-accent/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-accent">
-          {active.has_discount ? "تخفیف ویژه" : "محصول ویژه"}
-        </span>
-        <p className="mt-2 line-clamp-1 text-sm font-bold text-brand-dark group-hover:text-brand-accent">
-          {active.title_fa}
-        </p>
-        <p className="mt-1 text-sm font-extrabold text-brand-dark">
-          {formatToman(active.effective_price)}
-        </p>
-        <span className="mt-1 inline-block text-xs font-semibold text-brand-accent">
-          مشاهده محصول ←
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 rounded-full bg-brand-accent/10 px-2 py-0.5 text-[10px] font-semibold text-brand-accent">
+              {active.has_discount ? "تخفیف ویژه" : "ویژه"}
+            </span>
+            <p className="min-w-0 flex-1 truncate text-sm font-bold text-brand-dark group-hover:text-brand-accent">
+              {active.title_fa}
+            </p>
+          </div>
+          <p className="mt-0.5 text-sm font-extrabold text-brand-dark">
+            {formatToman(active.effective_price)}
+          </p>
+        </div>
+        <span className="shrink-0 text-xs font-semibold text-brand-accent">مشاهده ←</span>
       </Link>
 
       {/* وضعیت توقف برای صفحه‌خوان‌ها (بی‌صدا) */}
@@ -171,9 +186,9 @@ function FallbackVisual({ single }: { single?: ProductListItem }) {
         aria-label={`مشاهده محصول ${single.title_fa}`}
         className="block w-full max-w-sm overflow-hidden rounded-3xl border border-silver/60 bg-white shadow-card transition-colors hover:border-brand-accent/40"
       >
-        <div className="relative aspect-[4/3] w-full bg-brand-light">
+        <div className="relative aspect-[4/3] w-full bg-white">
           {url ? (
-            <Image src={url} alt={single.title_fa} fill sizes="(max-width:1024px) 90vw, 40vw" className="object-cover" />
+            <Image key={url} src={url} alt={single.title_fa} fill sizes="(max-width:1024px) 90vw, 40vw" className="object-contain p-4" />
           ) : (
             <ProductImagePlaceholder size="detail" />
           )}

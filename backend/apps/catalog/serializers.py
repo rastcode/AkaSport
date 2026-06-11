@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from django.db import transaction
+from django.db.models import Avg
 from rest_framework import serializers
 
 from apps.catalog.models import (
@@ -23,9 +24,23 @@ from apps.catalog.models import (
     Color,
     Product,
     ProductImage,
+    ProductReview,
     ProductVariant,
     Size,
+    WishlistItem,
 )
+
+
+def _is_wishlisted(serializer: serializers.Serializer, obj: "Product") -> bool:
+    """آیا این محصول در علاقه‌مندی‌های کاربرِ درخواست است؟ (بهینه با context)."""
+    ids = serializer.context.get("wishlisted_ids")
+    if ids is not None:
+        return obj.id in ids
+    request = serializer.context.get("request")
+    user = getattr(request, "user", None)
+    if not (user and getattr(user, "is_authenticated", False)):
+        return False
+    return WishlistItem.objects.filter(user=user, product=obj).exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -107,14 +122,25 @@ class ProductImageSerializer(serializers.ModelSerializer):
     بنابراین رفتار قبلیِ خواندن (دریافت URL) حفظ می‌شود و آپلود نیز ممکن می‌شود.
     """
 
+    # `image` قابل نوشتن (دریافت فایل از multipart). در پاسخ، با to_representation
+    # به URL مطلق (image_url) تبدیل می‌شود تا رفتار قبلیِ خواندن حفظ شود.
     image = serializers.ImageField(
+        required=True,
         error_messages={
-            "invalid_image": "فایل انتخاب‌شده یک تصویر معتبر نیست.",
-            "required": "انتخاب فایل تصویر الزامی است.",
+            "required": "لطفاً فایل تصویر را انتخاب کنید.",
+            "invalid": (
+                "فایل انتخاب‌شده تصویر معتبر نیست. لطفاً یک تصویر JPG، PNG یا WebP "
+                "سالم انتخاب کنید."
+            ),
+            "invalid_image": (
+                "فایل انتخاب‌شده تصویر معتبر نیست. لطفاً یک تصویر JPG، PNG یا WebP "
+                "سالم انتخاب کنید."
+            ),
             "empty": "فایل تصویر خالی است.",
             "no_name": "نام فایل تصویر نامعتبر است.",
-        }
+        },
     )
+    image_url = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProductImage
@@ -123,18 +149,32 @@ class ProductImageSerializer(serializers.ModelSerializer):
             "product",
             "variant",
             "image",
+            "image_url",
             "alt_text_fa",
             "is_primary",
             "display_order",
             "created_at",
         )
-        read_only_fields = ("id", "created_at")
+        read_only_fields = ("id", "image_url", "created_at")
         extra_kwargs = {
             "variant": {"required": False, "allow_null": True},
             "alt_text_fa": {"required": False, "allow_blank": True},
             "is_primary": {"required": False},
             "display_order": {"required": False},
         }
+
+    def get_image_url(self, obj: ProductImage) -> Optional[str]:
+        if not obj.image:
+            return None
+        request = self.context.get("request")
+        url = obj.image.url
+        return request.build_absolute_uri(url) if request else url
+
+    def to_representation(self, instance: ProductImage) -> dict[str, Any]:
+        # در خروجی، `image` همان URL مطلق باشد (سازگار با فرانتِ فعلی).
+        data = super().to_representation(instance)
+        data["image"] = data.get("image_url")
+        return data
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         product = attrs.get("product") or getattr(self.instance, "product", None)
@@ -195,6 +235,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     has_discount = serializers.BooleanField(read_only=True)
     primary_image = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
+    is_wishlisted = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -213,8 +254,12 @@ class ProductListSerializer(serializers.ModelSerializer):
             "is_featured",
             "view_count",
             "in_stock",
+            "is_wishlisted",
             "primary_image",
         )
+
+    def get_is_wishlisted(self, obj: Product) -> bool:
+        return _is_wishlisted(self, obj)
 
     def get_brand(self, obj: Product) -> Optional[dict[str, Any]]:
         b = obj.brand
@@ -254,6 +299,9 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     has_discount = serializers.BooleanField(read_only=True)
     effective_schema = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    reviews_count = serializers.SerializerMethodField()
+    is_wishlisted = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -280,14 +328,29 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "sold_count",
             "is_featured",
             "in_stock",
+            "average_rating",
+            "reviews_count",
+            "is_wishlisted",
             "images",
             "variants",
             "created_at",
             "updated_at",
         )
 
+    def get_is_wishlisted(self, obj: Product) -> bool:
+        return _is_wishlisted(self, obj)
+
     def get_effective_schema(self, obj: Product) -> dict[str, Any]:
         return obj.category.get_effective_schema() if obj.category_id else {}
+
+    def get_reviews_count(self, obj: Product) -> int:
+        return obj.reviews.filter(status=ProductReview.Status.APPROVED).count()
+
+    def get_average_rating(self, obj: Product) -> Optional[float]:
+        agg = obj.reviews.filter(
+            status=ProductReview.Status.APPROVED
+        ).aggregate(avg=Avg("rating"))
+        return round(agg["avg"], 1) if agg["avg"] is not None else None
 
     def get_in_stock(self, obj: Product) -> bool:
         annotated = getattr(obj, "in_stock", None)
@@ -432,3 +495,105 @@ class AdminProductWriteSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance: Product) -> dict[str, Any]:
         return ProductDetailSerializer(instance, context=self.context).data
+
+
+# --------------------------------------------------------------------------- #
+# نظرات محصول
+# --------------------------------------------------------------------------- #
+def _user_display(user: Any) -> str:
+    """نام نمایشیِ کاربر برای نظرات؛ در نبود نام، «کاربر آکامارکت»."""
+    name = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
+    return name or "کاربر آکامارکت"
+
+
+class ProductReviewSerializer(serializers.ModelSerializer):
+    """نظر عمومی محصول (خواندن + ثبت توسط کاربر لاگین‌شده)."""
+
+    user_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductReview
+        fields = (
+            "id",
+            "rating",
+            "title",
+            "comment",
+            "is_verified_purchase",
+            "status",
+            "user_display",
+            "created_at",
+        )
+        read_only_fields = (
+            "id",
+            "is_verified_purchase",
+            "status",
+            "user_display",
+            "created_at",
+        )
+        extra_kwargs = {
+            "rating": {
+                "min_value": 1,
+                "max_value": 5,
+                "error_messages": {
+                    "min_value": "امتیاز باید بین ۱ تا ۵ باشد.",
+                    "max_value": "امتیاز باید بین ۱ تا ۵ باشد.",
+                    "required": "انتخاب امتیاز الزامی است.",
+                    "invalid": "امتیاز نامعتبر است.",
+                },
+            },
+            "title": {"required": False, "allow_blank": True},
+            "comment": {
+                "min_length": 5,
+                "max_length": 1000,
+                "error_messages": {
+                    "blank": "متن نظر نمی‌تواند خالی باشد.",
+                    "required": "متن نظر الزامی است.",
+                    "min_length": "متن نظر باید حداقل ۵ کاراکتر باشد.",
+                    "max_length": "متن نظر نمی‌تواند بیشتر از ۱۰۰۰ کاراکتر باشد.",
+                },
+            },
+        }
+
+    def get_user_display(self, obj: ProductReview) -> str:
+        return _user_display(obj.user)
+
+
+class AdminProductReviewSerializer(serializers.ModelSerializer):
+    """نمای مدیریتی نظر؛ فقط فیلد status قابل نوشتن است."""
+
+    user_display = serializers.SerializerMethodField()
+    product_title = serializers.CharField(source="product.title_fa", read_only=True)
+    product_slug = serializers.CharField(source="product.slug", read_only=True)
+
+    class Meta:
+        model = ProductReview
+        fields = (
+            "id",
+            "product",
+            "product_title",
+            "product_slug",
+            "user",
+            "user_display",
+            "rating",
+            "title",
+            "comment",
+            "status",
+            "is_verified_purchase",
+            "created_at",
+        )
+        read_only_fields = (
+            "id",
+            "product",
+            "product_title",
+            "product_slug",
+            "user",
+            "user_display",
+            "rating",
+            "title",
+            "comment",
+            "is_verified_purchase",
+            "created_at",
+        )
+
+    def get_user_display(self, obj: ProductReview) -> str:
+        return _user_display(obj.user)

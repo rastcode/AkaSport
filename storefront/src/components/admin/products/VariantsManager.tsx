@@ -55,6 +55,7 @@ export function VariantsManager({ product, colors, sizes, onChanged }: Props) {
       <div className="mt-5 border-t border-dust-grey pt-5">
         <VariantCreate
           productId={product.id}
+          existing={product.variants}
           colors={colors}
           sizes={sizes}
           onChanged={onChanged}
@@ -181,11 +182,13 @@ function VariantRow({
 
 function VariantCreate({
   productId,
+  existing,
   colors,
   sizes,
   onChanged,
 }: {
   productId: number;
+  existing: ProductVariant[];
   colors: Color[];
   sizes: Size[];
   onChanged: () => void;
@@ -209,6 +212,16 @@ function VariantCreate({
     setError(null);
     if (!sku.trim()) { setError("کد انبار (SKU) الزامی است."); return; }
     if (!price || Number.isNaN(Number(price))) { setError("قیمت معتبر وارد کنید."); return; }
+    // جلوگیری از ترکیب تکراری رنگ + سایز.
+    const newColor = colorId ? Number(colorId) : null;
+    const newSize = sizeId ? Number(sizeId) : null;
+    const duplicate = existing.some(
+      (v) => (v.color?.id ?? null) === newColor && (v.size?.id ?? null) === newSize,
+    );
+    if (duplicate) {
+      setError("تنوعی با این ترکیب رنگ و سایز از قبل وجود دارد.");
+      return;
+    }
     setSaving(true);
     try {
       await createVariant({

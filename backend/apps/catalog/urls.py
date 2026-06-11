@@ -14,14 +14,20 @@ from apps.catalog.views import (
     AdminCategoryViewSet,
     AdminColorViewSet,
     AdminProductImageViewSet,
+    AdminProductReviewViewSet,
     AdminProductVariantViewSet,
     AdminProductViewSet,
     AdminSizeViewSet,
     BrandViewSet,
     CategoryViewSet,
     ColorViewSet,
+    ProductReviewListCreateView,
     ProductViewSet,
+    SearchSuggestionsView,
     SizeViewSet,
+    WishlistListView,
+    WishlistRemoveView,
+    WishlistToggleView,
 )
 
 app_name = "catalog"
@@ -43,8 +49,29 @@ admin_router.register("sizes", AdminSizeViewSet, basename="admin-size")
 admin_router.register("products", AdminProductViewSet, basename="admin-product")
 admin_router.register("variants", AdminProductVariantViewSet, basename="admin-variant")
 admin_router.register("images", AdminProductImageViewSet, basename="admin-image")
+admin_router.register("reviews", AdminProductReviewViewSet, basename="admin-review")
 
 urlpatterns = [
+    # نظرات عمومی محصول (فهرست تأییدشده + ثبت)
+    path(
+        "products/<slug:slug>/reviews/",
+        ProductReviewListCreateView.as_view(),
+        name="product-reviews",
+    ),
+    # پیشنهادهای جست‌وجو (autocomplete عمومی)
+    path(
+        "search/suggestions/",
+        SearchSuggestionsView.as_view(),
+        name="search-suggestions",
+    ),
+    # علاقه‌مندی‌ها (کاربر لاگین‌شده)
+    path("wishlist/", WishlistListView.as_view(), name="wishlist"),
+    path("wishlist/toggle/", WishlistToggleView.as_view(), name="wishlist-toggle"),
+    path(
+        "wishlist/<slug:slug>/",
+        WishlistRemoveView.as_view(),
+        name="wishlist-remove",
+    ),
     path("", include(public_router.urls)),
     path("admin/", include(admin_router.urls)),
 ]

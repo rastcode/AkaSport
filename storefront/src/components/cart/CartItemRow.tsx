@@ -30,9 +30,9 @@ export function CartItemRow({
 
   return (
     <li className="flex gap-4 bg-white/60 p-4">
-      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-silver/60">
+      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-silver/60 bg-white">
         {imageUrl ? (
-          <Image src={imageUrl} alt={item.product_title_fa} fill sizes="80px" className="object-cover" />
+          <Image src={imageUrl} alt={item.product_title_fa} fill sizes="80px" className="object-contain p-1.5" />
         ) : (
           <ProductImagePlaceholder size="thumbnail" />
         )}

@@ -16,7 +16,7 @@ export function OrderTotals({ order }: { order: Order }) {
         <Row label="جمع کالاها" value={formatToman(order.subtotal)} />
         {hasDiscount && (
           <Row
-            label="تخفیف"
+            label={order.coupon_code ? `تخفیف (${order.coupon_code})` : "تخفیف"}
             value={`− ${formatToman(order.discount_amount)}`}
             accent="text-green-600"
           />

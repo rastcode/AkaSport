@@ -132,6 +132,42 @@ function DashboardShell({
                 مدیریت محصولات
               </Link>
               <Link
+                href="/admin/products/featured"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                مدیریت محصولات ویژه
+              </Link>
+              <Link
+                href="/admin/categories"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                دسته‌بندی‌ها
+              </Link>
+              <Link
+                href="/admin/brands"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                برندها
+              </Link>
+              <Link
+                href="/admin/attributes"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                رنگ‌ها و سایزها
+              </Link>
+              <Link
+                href="/admin/reviews"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                مدیریت نظرات
+              </Link>
+              <Link
+                href="/admin/coupons"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                مدیریت کدهای تخفیف
+              </Link>
+              <Link
                 href="/products"
                 className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
               >

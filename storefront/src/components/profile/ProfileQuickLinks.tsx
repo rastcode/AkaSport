@@ -13,6 +13,12 @@ export function ProfileQuickLinks({ isStaff }: { isStaff: boolean }) {
       icon: <OrdersIcon />,
     },
     {
+      href: "/profile/wishlist",
+      title: "علاقه‌مندی‌های من",
+      desc: "محصولات نشان‌شده",
+      icon: <HeartIcon />,
+    },
+    {
       href: "/cart",
       title: "سبد خرید",
       desc: "مشاهده‌ی اقلام انتخاب‌شده",
@@ -56,6 +62,13 @@ export function ProfileQuickLinks({ isStaff }: { isStaff: boolean }) {
   );
 }
 
+function HeartIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 20s-7-4.35-9.33-8.5C1.1 8.3 2.6 5 5.6 5c1.9 0 3.2 1.1 4.4 2.6C11.2 6.1 12.5 5 14.4 5c3 0 4.5 3.3 2.93 6.5C19 15.65 12 20 12 20Z" />
+    </svg>
+  );
+}
 function OrdersIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>

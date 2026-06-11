@@ -33,6 +33,7 @@ import type {
 } from "@/types/catalog";
 
 export const dynamic = "force-dynamic"; // وابسته به searchParams و موجودی لحظه‌ای
+export const revalidate = 0; // بدون کش؛ تصاویر/داده همیشه تازه
 
 const PAGE_SIZE = 20;
 const ORDERINGS: ProductOrdering[] = [

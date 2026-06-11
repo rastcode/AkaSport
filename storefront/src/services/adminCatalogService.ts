@@ -30,6 +30,7 @@ import type {
   AdminProductWritePayload,
   AdminVariantWritePayload,
 } from "@/types/adminCatalog";
+import type { AdminProductReview, ReviewStatus } from "@/types/review";
 
 const CATALOG = "/catalog";
 const ADMIN = "/catalog/admin";
@@ -103,6 +104,21 @@ export async function updateAdminProduct(
 /** حذف محصول (hard delete در بک‌اند). */
 export async function deleteAdminProduct(slug: string): Promise<void> {
   await api.delete(`${ADMIN}/products/${encodeURIComponent(slug)}/`);
+}
+
+/**
+ * تغییر فقط فلگ «محصول ویژه» (is_featured) با PATCH جزئی؛ هیچ فیلد دیگری از
+ * محصول overwrite نمی‌شود.
+ */
+export async function setProductFeatured(
+  slug: string,
+  isFeatured: boolean,
+): Promise<ProductDetail> {
+  const { data } = await api.patch<ProductDetail>(
+    `${ADMIN}/products/${encodeURIComponent(slug)}/`,
+    { is_featured: isFeatured },
+  );
+  return data;
 }
 
 /* ------------------------------- تنوع‌ها --------------------------------- */
@@ -180,4 +196,119 @@ export async function getCatalogLookups(): Promise<CatalogLookups> {
     fetchAll<Size>(`${ADMIN}/sizes/`),
   ]);
   return { categories, brands, colors, sizes };
+}
+
+/* --------------------- CRUD دسته‌بندی / برند / رنگ / سایز -------------------- */
+/* همه از endpointهای موجودِ ادمین استفاده می‌کنند. ورودی می‌تواند FormData (برای
+ * آپلود تصویر/لوگو) یا یک شیء ساده (JSON) باشد؛ axios هدر مناسب را خودش می‌سازد. */
+
+type WriteBody = FormData | Record<string, unknown>;
+
+// --- دسته‌بندی (lookup با slug) ---
+export async function listCategories(): Promise<Category[]> {
+  return fetchAll<Category>(`${ADMIN}/categories/`);
+}
+export async function createCategory(body: WriteBody): Promise<Category> {
+  const { data } = await api.post<Category>(`${ADMIN}/categories/`, body);
+  return data;
+}
+export async function updateCategory(slug: string, body: WriteBody): Promise<Category> {
+  const { data } = await api.patch<Category>(
+    `${ADMIN}/categories/${encodeURIComponent(slug)}/`,
+    body,
+  );
+  return data;
+}
+export async function deleteCategory(slug: string): Promise<void> {
+  await api.delete(`${ADMIN}/categories/${encodeURIComponent(slug)}/`);
+}
+
+// --- برند (lookup با slug) ---
+export async function listBrands(): Promise<Brand[]> {
+  return fetchAll<Brand>(`${ADMIN}/brands/`);
+}
+export async function createBrand(body: WriteBody): Promise<Brand> {
+  const { data } = await api.post<Brand>(`${ADMIN}/brands/`, body);
+  return data;
+}
+export async function updateBrand(slug: string, body: WriteBody): Promise<Brand> {
+  const { data } = await api.patch<Brand>(
+    `${ADMIN}/brands/${encodeURIComponent(slug)}/`,
+    body,
+  );
+  return data;
+}
+export async function deleteBrand(slug: string): Promise<void> {
+  await api.delete(`${ADMIN}/brands/${encodeURIComponent(slug)}/`);
+}
+
+// --- رنگ (lookup با id) ---
+export async function listColors(): Promise<Color[]> {
+  return fetchAll<Color>(`${ADMIN}/colors/`);
+}
+export async function createColor(body: WriteBody): Promise<Color> {
+  const { data } = await api.post<Color>(`${ADMIN}/colors/`, body);
+  return data;
+}
+export async function updateColor(id: number, body: WriteBody): Promise<Color> {
+  const { data } = await api.patch<Color>(`${ADMIN}/colors/${id}/`, body);
+  return data;
+}
+export async function deleteColor(id: number): Promise<void> {
+  await api.delete(`${ADMIN}/colors/${id}/`);
+}
+
+// --- نظرات (lookup با id) ---
+export interface AdminReviewQuery {
+  status?: ReviewStatus;
+  product?: string;
+  search?: string;
+  page?: number;
+}
+
+export async function listAdminReviews(
+  query: AdminReviewQuery = {},
+): Promise<PaginatedResponse<AdminProductReview>> {
+  const params: Record<string, string | number> = {};
+  if (query.status) params.status = query.status;
+  if (query.product) params.product = query.product;
+  if (query.search) params.search = query.search;
+  if (query.page && query.page > 1) params.page = query.page;
+  const { data } = await api.get<
+    PaginatedResponse<AdminProductReview> | AdminProductReview[]
+  >(`${ADMIN}/reviews/`, { params });
+  if (Array.isArray(data)) {
+    return { count: data.length, next: null, previous: null, results: data };
+  }
+  return data;
+}
+
+export async function updateReviewStatus(
+  id: number,
+  status: ReviewStatus,
+): Promise<AdminProductReview> {
+  const { data } = await api.patch<AdminProductReview>(`${ADMIN}/reviews/${id}/`, {
+    status,
+  });
+  return data;
+}
+
+export async function deleteReview(id: number): Promise<void> {
+  await api.delete(`${ADMIN}/reviews/${id}/`);
+}
+
+// --- سایز (lookup با id) ---
+export async function listSizes(): Promise<Size[]> {
+  return fetchAll<Size>(`${ADMIN}/sizes/`);
+}
+export async function createSize(body: WriteBody): Promise<Size> {
+  const { data } = await api.post<Size>(`${ADMIN}/sizes/`, body);
+  return data;
+}
+export async function updateSize(id: number, body: WriteBody): Promise<Size> {
+  const { data } = await api.patch<Size>(`${ADMIN}/sizes/${id}/`, body);
+  return data;
+}
+export async function deleteSize(id: number): Promise<void> {
+  await api.delete(`${ADMIN}/sizes/${id}/`);
 }

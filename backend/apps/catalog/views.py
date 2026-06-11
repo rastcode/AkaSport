@@ -18,18 +18,22 @@ from django.db.models import (
     FloatField,
     OuterRef,
     Prefetch,
+    Q,
     QuerySet,
     Value,
     When,
 )
 from django.db.models.functions import Cast, Coalesce
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
-from rest_framework import permissions, viewsets
+from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
 from apps.authentication.permissions import IsAdmin
 from apps.catalog.filters import ProductFilter
@@ -39,10 +43,13 @@ from apps.catalog.models import (
     Color,
     Product,
     ProductImage,
+    ProductReview,
     ProductVariant,
     Size,
+    WishlistItem,
 )
 from apps.catalog.serializers import (
+    AdminProductReviewSerializer,
     AdminProductVariantWriteSerializer,
     AdminProductWriteSerializer,
     BrandSerializer,
@@ -52,6 +59,7 @@ from apps.catalog.serializers import (
     ProductDetailSerializer,
     ProductImageSerializer,
     ProductListSerializer,
+    ProductReviewSerializer,
     ProductVariantSerializer,
     SizeSerializer,
 )
@@ -203,6 +211,73 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             user and user.is_authenticated and getattr(user, "is_admin", False)
         )
 
+    def get_serializer_context(self):
+        """برای کاربر لاگین‌شده، شناسه‌های علاقه‌مندی را یک‌جا تزریق می‌کنیم تا
+        `is_wishlisted` بدون N+1 محاسبه شود."""
+        ctx = super().get_serializer_context()
+        user = self.request.user
+        if user and user.is_authenticated:
+            ctx["wishlisted_ids"] = set(
+                WishlistItem.objects.filter(user=user).values_list(
+                    "product_id", flat=True
+                )
+            )
+        return ctx
+
+
+# --------------------------------------------------------------------------- #
+# Search autocomplete (public)
+# --------------------------------------------------------------------------- #
+class SearchSuggestionsView(APIView):
+    """
+    `/search/suggestions/?q=...`
+
+    پیشنهادهای سبک برای autocomplete سربرگ: محصولات منتشرشده، دسته‌بندی‌ها و
+    برندهای فعال (هرکدام حداکثر ۵ مورد). اگر q کمتر از ۲ کاراکتر باشد، خالی.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request: Request) -> Response:
+        q = (request.query_params.get("q") or "").strip()
+        if len(q) < 2:
+            return Response({"products": [], "categories": [], "brands": []})
+
+        products = (
+            annotated_products()
+            .filter(status=Product.Status.PUBLISHED)
+            .filter(
+                Q(title_fa__icontains=q)
+                | Q(title_en__icontains=q)
+                | Q(slug__icontains=q)
+                | Q(brand__name_fa__icontains=q)
+                | Q(brand__name_en__icontains=q)
+                | Q(category__name_fa__icontains=q)
+            )
+            .distinct()[:5]
+        )
+        categories = (
+            Category.objects.filter(is_active=True)
+            .filter(
+                Q(name_fa__icontains=q) | Q(name_en__icontains=q) | Q(slug__icontains=q)
+            )
+            .order_by("display_order", "name_fa")[:5]
+        )
+        brands = Brand.objects.filter(is_active=True).filter(
+            Q(name_fa__icontains=q) | Q(name_en__icontains=q) | Q(slug__icontains=q)
+        )[:5]
+
+        ctx = {"request": request}
+        return Response(
+            {
+                "products": ProductListSerializer(products, many=True, context=ctx).data,
+                "categories": CategoryListSerializer(
+                    categories, many=True, context=ctx
+                ).data,
+                "brands": BrandSerializer(brands, many=True, context=ctx).data,
+            }
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Admin CRUD viewsets (ADMIN / OWNER only)
@@ -262,6 +337,157 @@ class AdminProductVariantViewSet(viewsets.ModelViewSet):
         if self.action in {"list", "retrieve"}:
             return ProductVariantSerializer
         return AdminProductVariantWriteSerializer
+
+
+# --------------------------------------------------------------------------- #
+# Product reviews
+# --------------------------------------------------------------------------- #
+def _user_purchased(user, product: Product) -> bool:
+    """آیا کاربر این محصول را در سفارشی غیرِ در‌انتظار/لغوشده خریده است؟"""
+    try:
+        from apps.orders.models import Order, OrderItem
+    except Exception:  # pragma: no cover - گارد دفاعی
+        return False
+    excluded = {Order.Status.PENDING, Order.Status.CANCELED}
+    return OrderItem.objects.filter(
+        order__user=user, product_variant__product=product
+    ).exclude(order__status__in=excluded).exists()
+
+
+class ProductReviewListCreateView(generics.ListCreateAPIView):
+    """
+    `/products/<slug>/reviews/`
+
+    GET  : فهرست نظرهای تأییدشده‌ی محصول (عمومی).
+    POST : ثبت نظر توسط کاربر لاگین‌شده (status=PENDING). هر کاربر فقط یک نظر.
+    """
+
+    serializer_class = ProductReviewSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
+
+    def _get_product(self) -> Product:
+        return get_object_or_404(Product, slug=self.kwargs["slug"])
+
+    def get_queryset(self):
+        return (
+            ProductReview.objects.filter(
+                product=self._get_product(),
+                status=ProductReview.Status.APPROVED,
+            )
+            .select_related("user")
+            .order_by("-created_at")
+        )
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        product = self._get_product()
+        user = self.request.user
+        if ProductReview.objects.filter(product=product, user=user).exists():
+            raise ValidationError(
+                {"detail": "شما قبلاً برای این محصول نظر ثبت کرده‌اید."}
+            )
+        serializer.save(
+            product=product,
+            user=user,
+            status=ProductReview.Status.PENDING,
+            is_verified_purchase=_user_purchased(user, product),
+        )
+
+
+class AdminProductReviewViewSet(viewsets.ModelViewSet):
+    """مدیریت نظرات (فقط ADMIN/OWNER): فهرست، تغییر وضعیت، حذف."""
+
+    serializer_class = AdminProductReviewSerializer
+    permission_classes = [IsAdminOrOwner]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        qs = ProductReview.objects.select_related("product", "user").order_by(
+            "-created_at"
+        )
+        params = self.request.query_params
+        status_param = params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param.upper())
+        product_param = params.get("product")
+        if product_param:
+            qs = qs.filter(product__slug=product_param)
+        search = params.get("search")
+        if search:
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(comment__icontains=search)
+                | Q(title__icontains=search)
+                | Q(product__title_fa__icontains=search)
+            )
+        return qs
+
+
+# --------------------------------------------------------------------------- #
+# Wishlist
+# --------------------------------------------------------------------------- #
+def _resolve_wishlist_product(data) -> Product:
+    """محصول را از روی `product` (id) یا `product_slug` پیدا می‌کند."""
+    pid = data.get("product")
+    slug = data.get("product_slug")
+    if pid:
+        return get_object_or_404(Product, pk=pid)
+    if slug:
+        return get_object_or_404(Product, slug=slug)
+    raise ValidationError({"product": "شناسه یا اسلاگ محصول الزامی است."})
+
+
+class WishlistListView(generics.ListAPIView):
+    """فهرست محصولاتِ علاقه‌مندیِ کاربر لاگین‌شده (به‌صورت کارت محصول)."""
+
+    serializer_class = ProductListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[Product]:
+        ids = WishlistItem.objects.filter(user=self.request.user).values_list(
+            "product_id", flat=True
+        )
+        return annotated_products().filter(id__in=list(ids)).order_by("-created_at")
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["wishlisted_ids"] = set(
+            WishlistItem.objects.filter(user=self.request.user).values_list(
+                "product_id", flat=True
+            )
+        )
+        return ctx
+
+
+class WishlistToggleView(APIView):
+    """افزودن/حذف محصول از علاقه‌مندی‌ها (toggle)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        product = _resolve_wishlist_product(request.data)
+        item, created = WishlistItem.objects.get_or_create(
+            user=request.user, product=product
+        )
+        if not created:
+            item.delete()
+            return Response({"is_wishlisted": False}, status=status.HTTP_200_OK)
+        return Response({"is_wishlisted": True}, status=status.HTTP_201_CREATED)
+
+
+class WishlistRemoveView(APIView):
+    """حذف یک محصول از علاقه‌مندی‌ها با اسلاگ."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request: Request, slug: str) -> Response:
+        product = get_object_or_404(Product, slug=slug)
+        WishlistItem.objects.filter(user=request.user, product=product).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminProductImageViewSet(viewsets.ModelViewSet):

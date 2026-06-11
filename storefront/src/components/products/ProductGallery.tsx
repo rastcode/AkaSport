@@ -8,7 +8,7 @@
  * نمایش داده می‌شود و crash نمی‌کند.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import { resolveMediaUrl } from "@/services/catalogService";
@@ -34,21 +34,30 @@ export function ProductGallery({
   );
 
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // امضای مجموعه‌ی تصاویر (بر اساس id)؛ با هر تغییر (حذف/آپلود/تعویض تنوع)،
+  // انتخاب به تصویر اول ریست می‌شود تا تصویر حذف‌شده‌ی قدیمی باقی نماند.
+  const imagesKey = sorted.map((img) => img.id).join(",");
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [imagesKey]);
+
   const safeIndex = Math.min(activeIndex, Math.max(0, sorted.length - 1));
   const active = sorted[safeIndex];
   const activeUrl = resolveMediaUrl(active?.image ?? null);
 
   return (
     <div dir="rtl" className="flex flex-col gap-4">
-      <div className="relative aspect-square overflow-hidden rounded-2xl border border-silver/60 bg-brand-light">
+      <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-silver/60 bg-white">
         {activeUrl ? (
           <Image
+            key={activeUrl}
             src={activeUrl}
             alt={active?.alt_text_fa || title}
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 40vw"
-            className="object-cover"
+            className="object-contain p-4"
           />
         ) : (
           <ProductImagePlaceholder size="detail" />

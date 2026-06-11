@@ -8,11 +8,12 @@
  * مجزای سفارش‌ها وجود ندارد، پس از موفقیت یک صفحه‌ی تأیید درون‌خطی نشان می‌دهد.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { CheckoutForm, type CheckoutFormErrors } from "@/components/checkout/CheckoutForm";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
+import { CouponBox } from "@/components/checkout/CouponBox";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { postCheckout } from "@/services/orderService";
@@ -27,6 +28,16 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<CheckoutFormErrors>({});
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+
+  // کد تخفیف اعمال‌شده
+  const [couponCode, setCouponCode] = useState<string | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+
+  // اگر مبلغ سبد عوض شد، کد تخفیف پاک می‌شود تا دوباره اعتبارسنجی شود.
+  useEffect(() => {
+    setCouponCode(null);
+    setCouponDiscount(0);
+  }, [subtotal]);
 
   if (authLoading || isLoading) {
     return <CenterSpinner />;
@@ -64,7 +75,10 @@ export default function CheckoutPage() {
     setErrors({});
     setSubmitting(true);
     try {
-      const order = await postCheckout(payload);
+      const order = await postCheckout({
+        ...payload,
+        coupon_code: couponCode || undefined,
+      });
       await refresh(); // سبد پس از ثبت موفق خالی شده است
       setPlacedOrder(order);
     } catch (err) {
@@ -88,8 +102,27 @@ export default function CheckoutPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <CheckoutForm submitting={submitting} errors={errors} onSubmit={handleSubmit} />
-        <aside className="h-fit">
-          <OrderSummary items={items} subtotal={subtotal} totalQuantity={totalQuantity} />
+        <aside className="h-fit space-y-4">
+          <CouponBox
+            subtotal={subtotal}
+            appliedCode={couponCode}
+            appliedDiscount={couponDiscount}
+            onApply={(code, discount) => {
+              setCouponCode(code);
+              setCouponDiscount(discount);
+            }}
+            onClear={() => {
+              setCouponCode(null);
+              setCouponDiscount(0);
+            }}
+          />
+          <OrderSummary
+            items={items}
+            subtotal={subtotal}
+            totalQuantity={totalQuantity}
+            discount={couponDiscount}
+            couponCode={couponCode}
+          />
         </aside>
       </div>
     </main>

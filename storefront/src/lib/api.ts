@@ -34,12 +34,27 @@ export const api: AxiosInstance = axios.create({
 
 /* ----------------------- request: attach bearer token ---------------------- */
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const headers = AxiosHeaders.from(config.headers);
+
   const token = getAccessToken();
   if (token) {
-    const headers = AxiosHeaders.from(config.headers);
     headers.set("Authorization", `Bearer ${token}`);
-    config.headers = headers;
   }
+
+  // برای آپلود فایل (FormData) نباید Content-Type دستی ست شود؛ باید مرورگر/axios
+  // خودش `multipart/form-data; boundary=...` را بسازد. پس هدر JSON پیش‌فرض حذف
+  // می‌شود. برای بقیه‌ی درخواست‌ها، اگر Content-Type تعیین نشده بود،
+  // application/json می‌ماند.
+  const isFormData =
+    typeof FormData !== "undefined" && config.data instanceof FormData;
+  if (isFormData) {
+    headers.delete("Content-Type");
+    headers.delete("content-type");
+  } else if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  config.headers = headers;
   return config;
 });
 

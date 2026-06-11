@@ -8,7 +8,7 @@
  * سمت سرور گرفته و به این کامپوننت پاس می‌شوند تا fetch سمت کلاینت نداشته باشیم.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { productsHref } from "@/components/products/productQuery";
@@ -107,19 +107,16 @@ export function CatalogFilters({
             onSelect={(value) => apply({ category: value || undefined })}
           />
         ) : (
-          <select
-            className="input-field"
-            value={filters.category ?? ""}
-            onChange={(e) => apply({ category: e.target.value || undefined })}
-            aria-label="فیلتر دسته‌بندی"
-          >
-            <option value="">همه دسته‌ها</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.slug}>
-                {c.full_path || c.name_fa}
-              </option>
-            ))}
-          </select>
+          <FilterDropdown
+            ariaLabel="فیلتر دسته‌بندی"
+            allLabel="همه دسته‌ها"
+            selected={filters.category ?? ""}
+            options={categories.map((c) => ({
+              value: c.slug,
+              label: c.full_path || c.name_fa,
+            }))}
+            onSelect={(value) => apply({ category: value || undefined })}
+          />
         )}
       </Group>
 
@@ -134,19 +131,13 @@ export function CatalogFilters({
             onSelect={(value) => apply({ brand: value || undefined })}
           />
         ) : (
-          <select
-            className="input-field"
-            value={filters.brand ?? ""}
-            onChange={(e) => apply({ brand: e.target.value || undefined })}
-            aria-label="فیلتر برند"
-          >
-            <option value="">همه برندها</option>
-            {brands.map((b) => (
-              <option key={b.id} value={b.slug}>
-                {b.name_fa}
-              </option>
-            ))}
-          </select>
+          <FilterDropdown
+            ariaLabel="فیلتر برند"
+            allLabel="همه برندها"
+            selected={filters.brand ?? ""}
+            options={brands.map((b) => ({ value: b.slug, label: b.name_fa }))}
+            onSelect={(value) => apply({ brand: value || undefined })}
+          />
         )}
       </Group>
 
@@ -268,6 +259,112 @@ export function CatalogFilters({
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * دراپ‌داون سفارشیِ جمع‌شونده برای دسکتاپ (جایگزین select نیتیو).
+ *
+ * پنل گزینه‌ها به‌صورت absolute داخل wrapperِ relative باز می‌شود، عرضش برابر
+ * sidebar است (از کادر بیرون نمی‌زند)، max-height و scroll داخلی دارد، و با
+ * انتخاب/کلیک بیرون/Escape بسته می‌شود.
+ */
+function FilterDropdown({
+  ariaLabel,
+  allLabel,
+  options,
+  selected,
+  onSelect,
+}: {
+  ariaLabel: string;
+  allLabel: string;
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const currentLabel =
+    options.find((o) => o.value === selected)?.label ?? allLabel;
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  function choose(value: string) {
+    onSelect(value);
+    setOpen(false);
+  }
+
+  const all = [{ value: "", label: allLabel }, ...options];
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        className="input-field flex items-center justify-between gap-2 text-right"
+      >
+        <span className="min-w-0 flex-1 truncate">{currentLabel}</span>
+        <ChevronIcon className={"h-4 w-4 shrink-0 text-brand-muted transition-transform " + (open ? "rotate-180" : "")} />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label={ariaLabel}
+          className="absolute right-0 left-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-silver bg-white p-1 shadow-card"
+        >
+          {all.map((opt) => {
+            const active = selected === opt.value;
+            return (
+              <button
+                key={opt.value || "__all__"}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => choose(opt.value)}
+                className={
+                  "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-right text-sm leading-5 transition-colors " +
+                  (active
+                    ? "bg-brand-accent/10 font-semibold text-brand-dark"
+                    : "text-brand-dark/80 hover:bg-brand-light")
+                }
+              >
+                <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                {active && <CheckIcon />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+    </svg>
   );
 }
 

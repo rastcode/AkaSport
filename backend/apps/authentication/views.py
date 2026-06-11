@@ -20,6 +20,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.authentication.exceptions import PersianThrottled
 from apps.authentication.serializers import (
     LoginSerializer,
+    LogoutSerializer,
     OTPRequestSerializer,
     OTPVerifySerializer,
     RegisterSerializer,
@@ -121,6 +122,21 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self) -> Any:
         return self.request.user
+
+
+class LogoutView(APIView):
+    """Blacklist the authenticated user's refresh token."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = LogoutSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"detail": "با موفقیت خارج شدید."},
+            status=status.HTTP_200_OK,
+        )
 
 
 class DecoratedTokenRefreshView(TokenRefreshView):

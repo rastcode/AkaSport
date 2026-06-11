@@ -53,7 +53,14 @@ class CustomUserAdmin(DjangoUserAdmin):
     list_display_links = ("id", "email", "phone_number")
     list_filter = ("role", "is_active", "is_staff", "is_superuser", "is_phone_verified")
     search_fields = ("email", "phone_number", "first_name", "last_name")
-    readonly_fields = ("last_login", "date_joined", "created_at", "updated_at")
+    readonly_fields = (
+        "is_staff",
+        "is_superuser",
+        "last_login",
+        "date_joined",
+        "created_at",
+        "updated_at",
+    )
 
     # Detail (change) layout.
     fieldsets = (
@@ -89,7 +96,6 @@ class CustomUserAdmin(DjangoUserAdmin):
                     "password1",
                     "password2",
                     "is_active",
-                    "is_staff",
                 ),
             },
         ),

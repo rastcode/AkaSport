@@ -124,7 +124,15 @@ class CustomUser(AbstractUser):
             self.is_staff = True
             self.is_superuser = False
         else:  # CUSTOMER
+            self.is_staff = False
             self.is_superuser = False
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {
+                "is_staff",
+                "is_superuser",
+            }
         super().save(*args, **kwargs)
 
 

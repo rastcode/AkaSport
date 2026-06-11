@@ -22,11 +22,16 @@ import {
   type ReactNode,
 } from "react";
 
-import api, { normalizeError, setAuthFailureHandler } from "@/lib/api";
+import api, {
+  normalizeError,
+  revokeRefreshToken,
+  setAuthFailureHandler,
+} from "@/lib/api";
 import {
   clearTokens,
   decodeToken,
   getAccessToken,
+  getRefreshToken,
   isTokenExpired,
   persistAccessToken,
   persistTokens,
@@ -56,8 +61,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback((): void => {
+    const access = getAccessToken();
+    const refresh = getRefreshToken();
+
     clearTokens();
     setUser(null);
+
+    if (access && refresh) {
+      void revokeRefreshToken(access, refresh).catch(() => {
+        // Local logout is intentionally final even if server revocation fails.
+      });
+    }
   }, []);
 
   const login = useCallback(

@@ -13,13 +13,46 @@ import { notFound } from "next/navigation";
 import { ProductInteractive } from "@/components/products/ProductInteractive";
 import { ProductSpecifications } from "@/components/products/ProductSpecifications";
 import { ProductReviews } from "@/components/products/ProductReviews";
+import {
+  serializeJsonLd,
+  toAbsoluteUrl,
+} from "@/lib/seo";
 import { getProductBySlug, resolveMediaUrl } from "@/services/catalogService";
+import type { ProductDetail } from "@/types/catalog";
 
 export const dynamic = "force-dynamic"; // موجودی و بازدید لحظه‌ای
 export const revalidate = 0; // بدون کش؛ تصاویر/داده همیشه تازه
 
 interface PageProps {
   params: { slug: string };
+}
+
+function getProductDescription(product: ProductDetail): string {
+  const description =
+    product.seo_description ||
+    product.short_description_fa ||
+    product.description_fa;
+
+  if (description) return description.slice(0, 160);
+
+  const context = product.brand?.name_fa || product.category?.name_fa;
+  return `خرید ${product.title_fa} از آکامارکت${context ? `، ${context}` : ""}.`;
+}
+
+function getProductImage(product: ProductDetail): string | undefined {
+  const image = resolveMediaUrl(
+    product.primary_image ??
+      product.images.find((item) => item.is_primary)?.image ??
+      product.images[0]?.image ??
+      null,
+  );
+  return image ? toAbsoluteUrl(image) : undefined;
+}
+
+function tomanToRial(price: string): string | undefined {
+  const normalized = price.trim();
+  if (!/^\d+$/.test(normalized)) return undefined;
+  return (BigInt(normalized) * BigInt(10)).toString();
 }
 
 /* ------------------------------ متادیتای سئو ------------------------------ */
@@ -35,36 +68,35 @@ export async function generateMetadata({
 
   if (!product) {
     return {
-      title: "محصول یافت نشد | آکامارکت",
-      description: "محصول موردنظر یافت نشد یا حذف شده است.",
+      title: "محصول یافت نشد",
       robots: { index: false, follow: false },
     };
   }
 
-  const title = product.seo_title || `${product.title_fa} | آکامارکت`;
-  const description =
-    product.seo_description ||
-    (product.description_fa
-      ? product.description_fa.slice(0, 160)
-      : `خرید ${product.title_fa} با بهترین قیمت از آکامارکت.`);
-
-  const image =
-    resolveMediaUrl(
-      product.primary_image ??
-        product.images.find((i) => i.is_primary)?.image ??
-        product.images[0]?.image ??
-        null,
-    ) ?? undefined;
+  const title = product.title_fa;
+  const description = getProductDescription(product);
+  const canonicalPath = `/product/${product.slug}`;
+  const canonicalUrl = toAbsoluteUrl(canonicalPath);
+  const image = getProductImage(product);
 
   return {
     title,
     description,
-    alternates: { canonical: `/product/${product.slug}` },
+    alternates: { canonical: canonicalPath },
     openGraph: {
       title,
       description,
+      url: canonicalUrl,
+      siteName: "آکامارکت",
+      locale: "fa_IR",
       type: "website",
       images: image ? [{ url: image, alt: product.title_fa }] : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: image ? [image] : [],
     },
   };
 }
@@ -91,8 +123,93 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   if (!product) notFound();
 
+  const canonicalUrl = toAbsoluteUrl(`/product/${product.slug}`);
+  const productImage = getProductImage(product);
+  const description = getProductDescription(product);
+  const priceInRial = tomanToRial(product.effective_price);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.title_fa,
+    description,
+    ...(productImage ? { image: [productImage] } : {}),
+    ...(product.brand
+      ? {
+          brand: {
+            "@type": "Brand",
+            name: product.brand.name_fa || product.brand.name_en,
+          },
+        }
+      : {}),
+    ...(priceInRial
+      ? {
+          offers: {
+            "@type": "Offer",
+            url: canonicalUrl,
+            priceCurrency: "IRR",
+            price: priceInRial,
+            availability: product.in_stock
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+          },
+        }
+      : {}),
+    ...(product.average_rating !== null &&
+    product.average_rating > 0 &&
+    product.reviews_count > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: product.average_rating,
+            reviewCount: product.reviews_count,
+          },
+        }
+      : {}),
+  };
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "خانه", item: toAbsoluteUrl("/") },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "محصولات",
+        item: toAbsoluteUrl("/products"),
+      },
+      ...(product.category
+        ? [
+            {
+              "@type": "ListItem",
+              position: 3,
+              name: product.category.name_fa,
+              item: toAbsoluteUrl(
+                `/products?category=${encodeURIComponent(product.category.slug)}`,
+              ),
+            },
+          ]
+        : []),
+      {
+        "@type": "ListItem",
+        position: product.category ? 4 : 3,
+        name: product.title_fa,
+        item: canonicalUrl,
+      },
+    ],
+  };
+
   return (
     <main dir="rtl" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
+      />
       {/* مسیر راهنما */}
       <nav aria-label="مسیر" className="mb-6 text-sm text-blue-slate">
         <ol className="flex flex-wrap items-center gap-1.5">

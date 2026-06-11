@@ -21,6 +21,7 @@ import {
   getAccessToken,
   getRefreshToken,
   persistAccessToken,
+  persistTokens,
 } from "@/lib/tokens";
 
 const BASE_URL =
@@ -87,11 +88,32 @@ async function performRefresh(): Promise<string | null> {
       { refresh },
       { headers: { "Content-Type": "application/json" } },
     );
-    persistAccessToken(data.access);
+    if (data.refresh) {
+      persistTokens(data.access, data.refresh);
+    } else {
+      persistAccessToken(data.access);
+    }
     return data.access;
   } catch {
     return null;
   }
+}
+
+export async function revokeRefreshToken(
+  access: string,
+  refresh: string,
+): Promise<void> {
+  await axios.post(
+    `${BASE_URL}/auth/logout/`,
+    { refresh },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${access}`,
+      },
+      timeout: 15000,
+    },
+  );
 }
 
 api.interceptors.response.use(

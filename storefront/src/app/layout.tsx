@@ -15,10 +15,37 @@ const vazirmatn = Vazirmatn({
   display: "swap",
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") ||
+  "http://localhost:3000";
+const DEFAULT_TITLE = "آکامارکت | فروشگاه لوازم ورزشی";
+const DEFAULT_DESCRIPTION =
+  "خرید آنلاین لوازم ورزشی، پوشاک ورزشی، کفش، کیف و تجهیزات تمرین از آکامارکت.";
+
 export const metadata: Metadata = {
-  title: "آکامارکت | بازارگاه اینترنتی",
-  description:
-    "آکامارکت؛ بازارگاه اینترنتی با تنوع بالای کالا، تخفیف‌های ویژه و ارسال سریع به سراسر کشور.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: DEFAULT_TITLE,
+    template: "%s | آکامارکت",
+  },
+  description: DEFAULT_DESCRIPTION,
+  applicationName: "آکامارکت",
+  openGraph: {
+    type: "website",
+    siteName: "آکامارکت",
+    locale: "fa_IR",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

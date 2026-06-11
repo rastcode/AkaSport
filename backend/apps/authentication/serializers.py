@@ -13,7 +13,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Q
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.authentication.models import CustomUser, OTPVerification, phone_validator
 
@@ -45,6 +47,8 @@ class UserSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "id",
+            "email",
+            "phone_number",
             "role",
             "role_display",
             "is_phone_verified",
@@ -52,6 +56,16 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "created_at",
         )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        protected = {
+            field: "تغییر این فیلد از پروفایل مجاز نیست."
+            for field in ("phone_number", "email")
+            if field in self.initial_data
+        }
+        if protected:
+            raise serializers.ValidationError(protected)
+        return attrs
 
 
 # --------------------------------------------------------------------------- #
@@ -166,6 +180,31 @@ class OTPVerifySerializer(serializers.Serializer):
 
     phone_number = serializers.CharField(validators=[phone_validator])
     code = serializers.CharField(min_length=6, max_length=6)
+
+
+class LogoutSerializer(serializers.Serializer):
+    """Validate and blacklist the current user's refresh token."""
+
+    refresh = serializers.CharField(write_only=True)
+
+    def validate_refresh(self, value: str) -> str:
+        try:
+            token = RefreshToken(value)
+        except TokenError as exc:
+            raise serializers.ValidationError(
+                "توکن خروج نامعتبر یا قبلاً استفاده شده است."
+            ) from exc
+
+        request = self.context["request"]
+        if str(token.get("user_id")) != str(request.user.pk):
+            raise serializers.ValidationError("توکن خروج نامعتبر است.")
+
+        self.context["refresh_token"] = token
+        return value
+
+    def save(self, **kwargs: Any) -> None:
+        token: RefreshToken = self.context["refresh_token"]
+        token.blacklist()
 
 
 # --------------------------------------------------------------------------- #

@@ -1,0 +1,53 @@
+name: CI
+
+# Lightweight CI — هیچ secret یا متغیر محرمانه‌ای لازم نیست.
+# فقط type-check/build فرانت‌اند و check بک‌اند را اجرا می‌کند.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  frontend:
+    name: Storefront (type-check + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: storefront
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: storefront/package-lock.json
+      - run: npm ci
+      - run: npm run type-check --if-present
+      - run: npm run build
+        env:
+          # مقادیر ساختگیِ غیرمحرمانه فقط برای موفقیت build.
+          NEXT_PUBLIC_SITE_URL: https://example.com
+          NEXT_PUBLIC_API_BASE_URL: https://example.com/api
+
+  backend:
+    name: Backend (Django check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Django system check
+        env:
+          # DEBUG=True تا گاردِ SECRET_KEY در CI خطا ندهد؛ مقدار ساختگی غیرمحرمانه.
+          DJANGO_DEBUG: "True"
+          DJANGO_SECRET_KEY: ci-dummy-not-a-real-secret
+          CACHE_IN_MEMORY: "1"
+          CHANNELS_IN_MEMORY: "1"
+        run: python manage.py check

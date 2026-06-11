@@ -12,6 +12,8 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # --------------------------------------------------------------------------- #
 # Optional .env loading (no hard dependency at runtime).
 # --------------------------------------------------------------------------- #
@@ -27,8 +29,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def env_bool(key: str, default: bool = False) -> bool:
-    """Parse a boolean environment variable."""
-    return os.environ.get(key, str(default)).lower() in {"1", "true", "yes", "on"}
+    """Parse a boolean environment variable or fail on an invalid value."""
+    raw = os.environ.get(key)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(
+        f"{key} must be a boolean: true/false, yes/no, on/off, or 1/0."
+    )
 
 
 def env_list(key: str, default: str = "") -> list[str]:
@@ -40,26 +53,81 @@ def env_list(key: str, default: str = "") -> list[str]:
 # --------------------------------------------------------------------------- #
 # Core security
 # --------------------------------------------------------------------------- #
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-dev-key-change-me-in-production-0123456789abcdef",
-)
+# Development stays zero-config. Production must explicitly set
+# DJANGO_DEBUG=false and provide all required security values below.
 DEBUG = env_bool("DJANGO_DEBUG", True)
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+
+_INSECURE_DEV_SECRET = "django-insecure-dev-key-change-me-in-production-0123456789abcdef"
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY", _INSECURE_DEV_SECRET if DEBUG else ""
+).strip()
+_INSECURE_SECRET_VALUES = {
+    "",
+    "change-me",
+    "change-me-to-a-long-random-string",
+    _INSECURE_DEV_SECRET,
+}
+if not DEBUG and SECRET_KEY in _INSECURE_SECRET_VALUES:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY must be set to a unique, non-placeholder value "
+        "when DJANGO_DEBUG=false."
+    )
+
+ALLOWED_HOSTS = env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1" if DEBUG else "",
+)
+if not DEBUG and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "DJANGO_ALLOWED_HOSTS must contain at least one hostname when "
+        "DJANGO_DEBUG=false."
+    )
+
+# --------------------------------------------------------------------------- #
+# Security headers
+# --------------------------------------------------------------------------- #
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+# Trust this header only when the deployment proxy overwrites it.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+SECURE_SSL_REDIRECT = (
+    not DEBUG and env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
+)
+SESSION_COOKIE_SECURE = (
+    not DEBUG and env_bool("DJANGO_SESSION_COOKIE_SECURE", True)
+)
+CSRF_COOKIE_SECURE = (
+    not DEBUG and env_bool("DJANGO_CSRF_COOKIE_SECURE", True)
+)
+SECURE_HSTS_SECONDS = (
+    int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0")) if not DEBUG else 0
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = (
+    not DEBUG
+    and SECURE_HSTS_SECONDS > 0
+    and env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
+)
+SECURE_HSTS_PRELOAD = (
+    not DEBUG
+    and SECURE_HSTS_SECONDS > 0
+    and env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
+)
 
 # --------------------------------------------------------------------------- #
 # CORS — allow the Next.js storefront (separate origin in dev) to call the API.
 # --------------------------------------------------------------------------- #
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
+    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
 )
 # The SPA sends the JWT in the Authorization header (not cookies), so we don't
 # need credentialed CORS; keep it off for a tighter default.
 CORS_ALLOW_CREDENTIALS = env_bool("CORS_ALLOW_CREDENTIALS", False)
 CSRF_TRUSTED_ORIGINS = env_list(
     "CSRF_TRUSTED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
+    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
 )
 
 
@@ -218,9 +286,14 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # در production فقط JSON؛ مرورگرِ DRF فقط در DEBUG فعال است.
     "DEFAULT_RENDERER_CLASSES": (
-        "rest_framework.renderers.JSONRenderer",
-        "rest_framework.renderers.BrowsableAPIRenderer",
+        ("rest_framework.renderers.JSONRenderer",)
+        + (
+            ("rest_framework.renderers.BrowsableAPIRenderer",)
+            if DEBUG
+            else ()
+        )
     ),
     "DEFAULT_FILTER_BACKENDS": (
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -304,8 +377,9 @@ VIP_DISCOUNT_RATE = os.environ.get("VIP_DISCOUNT_RATE", "0.10")
 # --------------------------------------------------------------------------- #
 REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+REDIS_URL = os.environ.get("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
 
-if env_bool("CHANNELS_IN_MEMORY", False):
+if env_bool("CHANNELS_IN_MEMORY", DEBUG):
     CHANNEL_LAYERS = {
         "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
     }
@@ -314,7 +388,7 @@ else:
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
-                "hosts": [(REDIS_HOST, REDIS_PORT)],
+                "hosts": [REDIS_URL],
                 "capacity": 1500,
                 "expiry": 10,
             },
@@ -331,7 +405,7 @@ else:
 # --------------------------------------------------------------------------- #
 CACHE_TIMEOUT_PRODUCTS = int(os.environ.get("CACHE_TIMEOUT_PRODUCTS", str(60 * 15)))
 
-if env_bool("CACHE_IN_MEMORY", False):
+if env_bool("CACHE_IN_MEMORY", DEBUG):
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

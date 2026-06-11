@@ -16,9 +16,11 @@ Strategies implemented:
 from __future__ import annotations
 
 import abc
+import logging
 from dataclasses import dataclass
 from typing import Any, ClassVar, Optional, Type
 
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.db import transaction
 from django.db.models import Q
@@ -165,13 +167,13 @@ class OTPAuthService(BaseAuthService):
         """
         Mock SMS gateway.
 
-        In production this would call Twilio/Kavenegar/etc. Here we simply
-        print to the console so the flow is fully testable offline.
+        A real deployment should replace this with an SMS provider. The code
+        is logged only in DEBUG so it is never exposed in production output.
         """
-        print(
-            f"\n[MOCK SMS] -> {phone_number}\n"
-            f"    Your AkaSport verification code is: {code}\n"
-        )
+        if settings.DEBUG:
+            logging.getLogger("apps.authentication.otp").debug(
+                "[MOCK SMS] -> %s code=%s", phone_number, code
+            )
 
     # ----------------------------- use cases --------------------------- #
     def request_otp(self) -> dict[str, Any]:
@@ -194,13 +196,15 @@ class OTPAuthService(BaseAuthService):
             )
         self._send_sms(phone_number, otp.plain_code)
 
-        return {
+        result: dict[str, Any] = {
             "detail": "کد تأیید ارسال شد.",
             "phone_number": phone_number,
             "expires_at": otp.expires_at,
-            # NOTE: returned only for local/dev convenience; remove in prod.
-            "debug_code": otp.plain_code,
         }
+        # Local convenience only; production responses never expose the OTP.
+        if settings.DEBUG:
+            result["debug_code"] = otp.plain_code
+        return result
 
     def authenticate(self) -> TokenPair:
         """Verify a submitted OTP code and return tokens on success."""

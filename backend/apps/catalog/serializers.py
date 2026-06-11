@@ -18,6 +18,7 @@ from django.db import transaction
 from django.db.models import Avg
 from rest_framework import serializers
 
+from apps.catalog.validators import validate_catalog_image
 from apps.catalog.models import (
     Brand,
     Category,
@@ -128,6 +129,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
     # به URL مطلق (image_url) تبدیل می‌شود تا رفتار قبلیِ خواندن حفظ شود.
     image = serializers.ImageField(
         required=True,
+        validators=[validate_catalog_image],
         error_messages={
             "required": "لطفاً فایل تصویر را انتخاب کنید.",
             "invalid": (

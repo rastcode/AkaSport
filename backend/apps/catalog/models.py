@@ -27,6 +27,7 @@ from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
+from apps.catalog.validators import validate_catalog_image
 from apps.core.models import TimeStampedModel
 
 
@@ -48,10 +49,18 @@ class Category(TimeStampedModel):
         verbose_name=_("دسته‌ی والد"),
     )
     icon = models.ImageField(
-        _("آیکن"), upload_to="catalog/categories/icons/", null=True, blank=True
+        _("آیکن"),
+        upload_to="catalog/categories/icons/",
+        validators=[validate_catalog_image],
+        null=True,
+        blank=True,
     )
     image = models.ImageField(
-        _("تصویر"), upload_to="catalog/categories/images/", null=True, blank=True
+        _("تصویر"),
+        upload_to="catalog/categories/images/",
+        validators=[validate_catalog_image],
+        null=True,
+        blank=True,
     )
     is_active = models.BooleanField(_("فعال"), default=True)
     display_order = models.PositiveIntegerField(_("ترتیب نمایش"), default=0)
@@ -123,7 +132,11 @@ class Brand(TimeStampedModel):
     name_en = models.CharField(_("نام (انگلیسی)"), max_length=150, blank=True)
     slug = models.SlugField(_("اسلاگ"), max_length=170, unique=True, blank=True)
     logo = models.ImageField(
-        _("لوگو"), upload_to="catalog/brands/", null=True, blank=True
+        _("لوگو"),
+        upload_to="catalog/brands/",
+        validators=[validate_catalog_image],
+        null=True,
+        blank=True,
     )
     description_fa = models.TextField(_("توضیحات"), blank=True)
     is_active = models.BooleanField(_("فعال"), default=True)
@@ -383,7 +396,11 @@ class ProductImage(TimeStampedModel):
         blank=True,
         verbose_name=_("تنوع"),
     )
-    image = models.ImageField(_("تصویر"), upload_to="catalog/products/")
+    image = models.ImageField(
+        _("تصویر"),
+        upload_to="catalog/products/",
+        validators=[validate_catalog_image],
+    )
     alt_text_fa = models.CharField(_("متن جایگزین"), max_length=255, blank=True)
     is_primary = models.BooleanField(_("تصویر اصلی"), default=False)
     display_order = models.PositiveIntegerField(_("ترتیب نمایش"), default=0)

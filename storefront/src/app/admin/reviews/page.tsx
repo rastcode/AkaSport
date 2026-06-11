@@ -176,7 +176,7 @@ export default function AdminReviewsPage() {
               <li key={r.id} className="rounded-xl border border-silver/60 bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/product/${encodeURIComponent(r.product_slug)}`} target="_blank" className="font-semibold text-iron-grey hover:text-bondi-blue">
+                    <Link href={`/product/${encodeURIComponent(r.product_slug)}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-grey hover:text-bondi-blue">
                       {r.product_title}
                     </Link>
                     <span className="text-xs text-brand-accent">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>

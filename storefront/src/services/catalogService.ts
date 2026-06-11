@@ -19,9 +19,11 @@ import type {
   ProductQueryParams,
   Size,
 } from "@/types/catalog";
+import { isSafeHttpUrl, isSafeRelativeUrl } from "@/lib/url";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
+const FALLBACK_MEDIA_BASE = "http://127.0.0.1:8000";
 const MEDIA_BASE = (
   process.env.NEXT_PUBLIC_MEDIA_BASE_URL || API_BASE.replace(/\/api\/?$/, "")
 ).replace(/\/+$/, "");
@@ -162,11 +164,17 @@ export async function getProductBySlug(
 /** تبدیل مسیر نسبی رسانه به URL مطلق (در صورت نیاز). */
 export function resolveMediaUrl(url: string | null): string | null {
   if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  const candidate = url.trim();
+  if (!candidate) return null;
+  if (isSafeHttpUrl(candidate)) return candidate;
+  if (!isSafeRelativeUrl(candidate)) return null;
 
-  const mediaPath = `/${url.replace(/^\/+/, "")}`;
+  const mediaPath = `/${candidate.replace(/^\/+/, "")}`;
+  const safeMediaBase = isSafeHttpUrl(MEDIA_BASE)
+    ? MEDIA_BASE
+    : FALLBACK_MEDIA_BASE;
   try {
-    const mediaBaseUrl = new URL(MEDIA_BASE);
+    const mediaBaseUrl = new URL(safeMediaBase);
     const basePath = mediaBaseUrl.pathname.replace(/\/+$/, "");
     if (
       basePath &&
@@ -179,5 +187,5 @@ export function resolveMediaUrl(url: string | null): string | null {
     // Invalid configuration falls back to a simple, predictable join.
   }
 
-  return `${MEDIA_BASE}${mediaPath}`;
+  return `${safeMediaBase}${mediaPath}`;
 }

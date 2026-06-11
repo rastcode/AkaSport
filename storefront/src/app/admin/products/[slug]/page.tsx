@@ -143,7 +143,7 @@ function EditInner({ slug }: { slug: string }) {
             <span>{formatNumber(product.view_count)} بازدید</span>
             <span>·</span>
             <span>{formatNumber(product.sold_count)} فروش</span>
-            <Link href={`/product/${encodeURIComponent(product.slug)}`} target="_blank" className="font-semibold text-bondi-blue hover:text-bondi-blue-dark">
+            <Link href={`/product/${encodeURIComponent(product.slug)}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-bondi-blue hover:text-bondi-blue-dark">
               مشاهده در فروشگاه ↗
             </Link>
           </div>

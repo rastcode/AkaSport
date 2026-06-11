@@ -168,6 +168,12 @@ function DashboardShell({
                 مدیریت کدهای تخفیف
               </Link>
               <Link
+                href="/admin/settings"
+                className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
+              >
+                تنظیمات سایت
+              </Link>
+              <Link
                 href="/products"
                 className="block rounded-lg px-3 py-2 text-sm font-semibold text-blue-slate transition-colors hover:bg-dust-grey hover:text-iron-grey"
               >
